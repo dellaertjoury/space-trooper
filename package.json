@@ -1,0 +1,23 @@
+{
+  "name": "space-trooper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "agents": "node agents/run-all.mjs",
+    "agent:kid": "node agents/run-all.mjs kid",
+    "agent:hardcore": "node agents/run-all.mjs hardcore",
+    "agent:dev": "node agents/run-all.mjs dev"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
