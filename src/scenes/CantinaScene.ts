@@ -1,13 +1,15 @@
 /**
- * The Cantina: the hub every run starts from. Walk between the stations, press Up / E (or click a sign)
- * to open one. The Mission Table (or the START MISSION button) launches a run with your loadout.
+ * The Cantina: the hub every run starts from, a three-floor platformer at run scale.
+ * Walk / jump between the stations, press Up / E (or click a sign) to open one.
+ * The Mission Table (or the START MISSION button) launches a run with your loadout.
  */
 import Phaser from 'phaser';
 import { BTN, padCombo, rle } from '../core/input';
-import { Tile, TileMap, T } from '../core/tilemap';
+import { TileMap, T } from '../core/tilemap';
 import { Player } from '../game/player';
 import { loadoutFrom, loadProfile, Profile, RES_ICON, Resources, saveProfile } from '../game/profile';
-import { drawCantina, drawHangingLamp, drawHoloCone, drawPlanetHolo, LAYOUT, StationId } from '../art/cantina';
+import { drawArmouryRack, drawBarCounter, drawHoloCone, drawHoloTable, drawHubBackdrop, drawHubTiles, StationId } from '../art/cantina';
+import { FLOOR, HUB_H, HUB_PROPS, HUB_SPAWN, HUB_STATIONS, HUB_W, hubMap } from '../game/hubLevel';
 import { drawGlow } from '../art/procedural';
 import { closeStation, isStationOpen, navigate, openStation } from '../ui/stations';
 import { preloadTrooper, TrooperView } from './trooperView';
@@ -16,7 +18,9 @@ import { shared } from './shared';
 import { IssueTracker } from '../debug/issues';
 
 const STEP_MS = 1000 / 60;
-const NEAR = 70;
+const ROOM_W = HUB_W * T, ROOM_H = HUB_H * T;
+const CANTINA_ASSETS = ['scrapper_a', 'scrapper_b', 'droid_turret', 'gear_chest', 'gear_shoulder', 'gear_boots', 'gear_gauntlet'];
+const PROCEDURAL = ['barCounter', 'holoTable', 'armouryRack'];
 const FONT = 'Oswald, Impact, sans-serif';
 
 export class CantinaScene extends Phaser.Scene {
@@ -26,7 +30,9 @@ export class CantinaScene extends Phaser.Scene {
   private view!: TrooperView;
   private acc = 0;
   private frame = 0;
-  private signs: { id: StationId; x: number; text: Phaser.GameObjects.Text; glow: Phaser.GameObjects.Image; prompt: Phaser.GameObjects.Text }[] = [];
+  private signs: { id: StationId; text: Phaser.GameObjects.Text; glow: Phaser.GameObjects.Image; prompt: Phaser.GameObjects.Text }[] = [];
+  private camX = 0;
+  private camY = 0;
   private near: StationId | null = null;
   private resTexts: Partial<Record<keyof Resources, Phaser.GameObjects.Text>> = {};
   private interactQueued = false;
@@ -39,8 +45,11 @@ export class CantinaScene extends Phaser.Scene {
 
   preload() {
     preloadTrooper(this);
-    for (const k of ['scrapper_a', 'scrapper_b', 'droid_turret', 'droid_medic', 'gear_chest', 'gear_shoulder', 'gear_boots', 'gear_gauntlet', 'saber_blue', 'saber_red'])
-      if (!this.textures.exists(k)) this.load.image(k, `assets/cantina/${k}.png`);
+    for (const k of CANTINA_ASSETS) if (!this.textures.exists(k)) this.load.image(k, `assets/cantina/${k}.png`);
+    for (const p of HUB_PROPS) {
+      if (PROCEDURAL.includes(p.key) || CANTINA_ASSETS.includes(p.key) || this.textures.exists(p.key)) continue;
+      this.load.image(p.key, `assets/hub/${p.key}.png`);
+    }
     for (const k of ['icon_health', 'icon_credit', 'icon_crystal_blue', 'icon_crystal_purple', 'icon_droidpart', 'icon_ingot'])
       if (!this.textures.exists('ui_' + k)) this.load.image('ui_' + k, `assets/ui/${k}.png`);
   }
@@ -50,82 +59,65 @@ export class CantinaScene extends Phaser.Scene {
     this.signs = [];
     this.resTexts = {};
     this.profile = loadProfile();
-    const L = LAYOUT;
 
-    // walkable room: a floor and two walls
-    this.map = new TileMap(Math.ceil(L.w / T), Math.ceil(L.h / T));
-    const floorRow = L.floorY / T;
-    this.map.fill(0, floorRow, this.map.w - 1, this.map.h - 1, Tile.Solid);
-    this.map.fill(0, 0, 0, this.map.h - 1, Tile.Solid);
-    this.map.fill(this.map.w - 1, 0, this.map.w - 1, this.map.h - 1, Tile.Solid);
+    this.map = hubMap();
     const lo = loadoutFrom(this.profile);
-    this.player = new Player(875 - 10, L.floorY - 56, lo);
+    this.player = new Player(HUB_SPAWN.x, HUB_SPAWN.y, lo);
     this.player.facing = data?.result ? -1 : 1;
 
     // art
-    const tex = (key: string, cv: HTMLCanvasElement) => { if (!this.textures.exists(key)) this.textures.addCanvas(key, cv); };
-    tex('cantinaBg', drawCantina());
-    tex('holoCone', drawHoloCone());
-    tex('planetHolo', drawPlanetHolo());
-    tex('hangLamp', drawHangingLamp());
-    tex('glowWarmBig', drawGlow(160, '255,160,80'));
-    tex('glowCoolBig', drawGlow(140, '80,220,255'));
-    this.add.image(0, 0, 'cantinaBg').setOrigin(0).setScale(0.5);
+    const tex = (key: string, cv: () => HTMLCanvasElement) => { if (!this.textures.exists(key)) this.textures.addCanvas(key, cv()); };
+    tex('hubBackdrop', () => drawHubBackdrop(ROOM_W, ROOM_H, [FLOOR.ground, FLOOR.mid, FLOOR.top]));
+    tex('hubTiles', () => drawHubTiles(this.map, T));
+    tex('barCounter', drawBarCounter);
+    tex('holoTable', drawHoloTable);
+    tex('armouryRack', drawArmouryRack);
+    tex('holoCone', drawHoloCone);
+    tex('glowWarmBig', () => drawGlow(160, '255,160,80'));
+    tex('glowCoolBig', () => drawGlow(140, '80,220,255'));
+    this.add.image(0, 0, 'hubBackdrop').setOrigin(0).setScale(0.5);
+    this.add.image(0, 0, 'hubTiles').setOrigin(0).setScale(0.5).setDepth(0.5);
 
-    for (const l of L.lamps) {
-      this.add.image(l.x, l.y - 40, 'hangLamp').setOrigin(0.5, 0).setScale(0.5);
-      this.add.image(l.x, l.y + 30, 'glowWarmBig').setBlendMode(Phaser.BlendModes.ADD).setScale(0.6).setAlpha(0.55);
-    }
-    // NPCs and props
-    this.add.image(272, L.floorY, 'scrapper_a').setOrigin(0.5, 1).setScale(0.5).setFlipX(true).setDepth(1);
-    this.add.image(132, L.floorY, 'scrapper_b').setOrigin(0.5, 1).setScale(0.5).setDepth(1);
-    this.add.image(505, 300, 'gear_chest').setScale(0.3);
-    this.add.image(578, 302, 'gear_shoulder').setScale(0.3);
-    this.add.image(505, 386, 'gear_boots').setScale(0.24);
-    this.add.image(585, 390, 'gear_gauntlet').setScale(0.24);
-    this.add.image(1370, 372, 'droid_medic').setScale(0.28);
-    const drone = this.add.image(1446, 330, 'droid_turret').setScale(0.24);
-    this.tweens.add({ targets: drone, y: 322, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-
-    // holograms: crossed sabers over the Forge, a planet over the Mission Table
-    for (const h of L.holos) {
-      this.add.image(h.x, h.y, 'holoCone').setOrigin(0.5, 1).setScale(0.5).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.7);
-      this.add.image(h.x, h.y - 60, 'glowCoolBig').setBlendMode(Phaser.BlendModes.ADD).setScale(0.5).setAlpha(0.5);
-      const parts: Phaser.GameObjects.Image[] = [];
-      if (h.kind === 'sabers') {
-        // crossed blue and red blades: the two paths
-        parts.push(this.add.image(h.x - 4, h.y - 58, 'saber_blue').setScale(0.2).setAngle(-15));
-        parts.push(this.add.image(h.x + 4, h.y - 58, 'saber_red').setScale(0.2).setAngle(-165).setFlipY(true));
-      } else {
-        parts.push(this.add.image(h.x, h.y - 56, 'planetHolo').setScale(0.5));
-        this.tweens.add({ targets: parts[0], angle: 360, duration: 24000, repeat: -1 });
+    // props, each at its real world size
+    for (const p of HUB_PROPS) {
+      if (!this.textures.exists(p.key)) continue;
+      const im = this.add.image(p.x, p.y, p.key).setOrigin(0.5, p.hang ? 0 : 1).setFlipX(!!p.flip).setDepth(p.front ? 4 : 1);
+      im.setScale(p.h / im.height);
+      if (p.glow !== undefined) {
+        const gy = p.hang ? p.y + p.h : p.y - p.h / 2;
+        const g = this.add.image(p.x, gy, p.hang ? 'glowWarmBig' : 'glowCoolBig').setBlendMode(Phaser.BlendModes.ADD)
+          .setTint(p.glow).setScale(p.hang ? 0.55 : 0.3).setAlpha(p.hang ? 0.55 : 0.6).setDepth(0.8);
+        if (p.bob) this.tweens.add({ targets: g, y: gy - 3, duration: 1500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       }
-      for (const p of parts) {
-        p.setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.75);
-        this.tweens.add({ targets: p, alpha: 0.5, duration: 140, yoyo: true, repeat: -1, repeatDelay: 1800 + Math.random() * 2400 });
+      if (p.bob) this.tweens.add({ targets: im, y: p.y - 3, duration: 1500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      if (p.key === 'holo_sabers' || p.key === 'holo_planet') {
+        im.setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9);
+        this.tweens.add({ targets: im, alpha: 0.55, duration: 120, yoyo: true, repeat: -1, repeatDelay: 1600 + Math.random() * 2400 });
       }
     }
+    // light cone over the Forge's holo-table
+    const forgeTable = HUB_PROPS.find((p) => p.key === 'holoTable');
+    if (forgeTable) this.add.image(forgeTable.x, forgeTable.y - 26, 'holoCone').setOrigin(0.5, 1).setScale(0.32, 0.36).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.6).setDepth(0.9);
 
     // holo-signs over every station (click to open)
-    const labelY: Record<StationId, number> = { scrapper: 150, armoury: 170, forge: 290, workshop: 200, mission: 290 };
-    for (const st of L.stations) {
-      const y = labelY[st.id];
-      const glow = this.add.image(st.x, y, 'glowCoolBig').setBlendMode(Phaser.BlendModes.ADD).setScale(0.55, 0.22).setAlpha(0.35).setDepth(5);
-      const text = this.add.text(st.x, y, st.label, { fontFamily: FONT, fontSize: '20px', color: '#ffffff', stroke: '#140e1e', strokeThickness: 5 })
+    for (const st of HUB_STATIONS) {
+      const x = (st.x0 + st.x1) / 2, y = st.signY;
+      const glow = this.add.image(x, y, 'glowCoolBig').setBlendMode(Phaser.BlendModes.ADD).setScale(0.45, 0.16).setAlpha(0.35).setDepth(5);
+      const text = this.add.text(x, y, st.label, { fontFamily: FONT, fontSize: '14px', color: '#ffffff', stroke: '#140e1e', strokeThickness: 4 })
         .setOrigin(0.5).setResolution(3).setDepth(6).setInteractive({ useHandCursor: true });
       text.on('pointerdown', () => this.open(st.id));
-      const prompt = this.add.text(st.x, y + 20, '▲ / E  OPEN', { fontFamily: FONT, fontSize: '10px', color: '#140e1e', backgroundColor: '#ffd58a', padding: { x: 5, y: 2 } })
+      const prompt = this.add.text(x, y + 15, '▲ / E  OPEN', { fontFamily: FONT, fontSize: '8px', color: '#140e1e', backgroundColor: '#ffd58a', padding: { x: 4, y: 1 } })
         .setOrigin(0.5).setResolution(3).setDepth(6).setVisible(false);
-      this.tweens.add({ targets: [text, glow], y: y - 3, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-      this.signs.push({ id: st.id, x: st.x, text, glow, prompt });
+      this.tweens.add({ targets: [text, glow], y: y - 2, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.signs.push({ id: st.id, text, glow, prompt });
     }
 
     this.view = new TrooperView(this, this.profile.saber.color, this.profile.saber.form === 'dual', 3);
 
-    // camera: 2x zoom like the run, follows the Trooper sideways
+    // camera: 2x zoom like the run, follows the Trooper in both directions
     const cam = this.cameras.main;
     cam.setZoom(2);
-    cam.setBounds(0, 0, L.w, L.h);
+    this.camX = this.player.cx; this.camY = this.player.body.y;
     if (this.game.renderer.type === Phaser.WEBGL) cam.postFX.addVignette(0.5, 0.5, 0.9, 0.35);
     cam.fadeIn(400, 8, 6, 12);
 
@@ -150,7 +142,7 @@ export class CantinaScene extends Phaser.Scene {
       build: BUILD,
       pause: (on) => { this.paused = on; input.enabled = !on && !isStationOpen(); if (!on) input.resetEdges(); },
       screenshot: () => this.screenshot(),
-      context: () => ({ seed: 0, frame: this.frame, state: { scene: 'cantina', station: this.near, profile: this.profile, player: { x: this.player.body.x, tileX: Math.floor(this.player.cx / T), tileY: floorRow - 1, state: this.player.state } }, inputsTail: rle(input.record.slice(-600)), inputsFull: [] }),
+      context: () => ({ seed: 0, frame: this.frame, state: { scene: 'cantina', station: this.near, profile: this.profile, player: { x: this.player.body.x, y: this.player.body.y, tileX: Math.floor(this.player.cx / T), tileY: Math.floor((this.player.feet - 1) / T), state: this.player.state } }, inputsTail: rle(input.record.slice(-600)), inputsFull: [] }),
       replay: () => this.flash('Replays only work for issues logged during a run'),
     });
     this.exposeApi();
@@ -231,21 +223,30 @@ export class CantinaScene extends Phaser.Scene {
   }
 
   // ------------------------------------------------------------ rendering
+  /** The station the Trooper is standing at (same floor, inside its zone), if any. */
+  private stationHere(): StationId | null {
+    const p = this.player;
+    if (p.state !== 'ground') return null;
+    for (const st of HUB_STATIONS) if (Math.abs(p.feet - st.floor) < 3 && p.cx >= st.x0 && p.cx <= st.x1) return st.id;
+    return null;
+  }
+
   private render() {
     const p = this.player;
     this.view.update(p);
-    const cx = p.cx;
-    let best: StationId | null = null, bd = NEAR;
-    for (const s of this.signs) { const d = Math.abs(s.x - cx); if (d < bd) { bd = d; best = s.id; } }
-    this.near = best;
+    this.near = this.stationHere();
     for (const s of this.signs) {
-      const on = s.id === best;
+      const on = s.id === this.near;
       s.prompt.setVisible(on && !isStationOpen());
       s.text.setColor(on ? '#ffe9b0' : '#ffffff').setScale(on ? 1.12 : 1);
       s.glow.setAlpha(on ? 0.7 : 0.35);
     }
-    const cam = this.cameras.main;
-    cam.centerOn(Phaser.Math.Clamp(cx, VIEW_W / 2, LAYOUT.w - VIEW_W / 2), LAYOUT.h - VIEW_H / 2);
+    // smooth follow; clamp to the room
+    this.camX += (p.cx + p.facing * 50 - this.camX) * 0.12;
+    this.camY += (p.body.y + 10 - this.camY) * 0.12;
+    const cx = Phaser.Math.Clamp(this.camX, VIEW_W / 2, ROOM_W - VIEW_W / 2);
+    const cy = Phaser.Math.Clamp(this.camY, VIEW_H / 2, ROOM_H - VIEW_H / 2);
+    this.cameras.main.centerOn(cx, cy);
   }
 
   // ------------------------------------------------------------ HUD (resource bar like the reference, big launch button)
@@ -329,8 +330,29 @@ export class CantinaScene extends Phaser.Scene {
       scene: 'cantina',
       profile: () => JSON.parse(JSON.stringify(scene.profile)),
       near: () => scene.near,
-      stations: () => LAYOUT.stations.map((s) => ({ id: s.id, x: s.x })),
-      walkTo: (x: number) => { const b = scene.player.body; b.x = Math.round(x - b.w / 2); b.rx = 0; scene.render(); return scene.near; },
+      stations: () => HUB_STATIONS.map((s) => ({ id: s.id, x: (s.x0 + s.x1) / 2, floor: s.floor })),
+      /** put the Trooper at a station (or an x on the ground floor) */
+      walkTo: (to: StationId | number) => {
+        const st = HUB_STATIONS.find((s) => s.id === to);
+        const b = scene.player.body;
+        b.x = Math.round((st ? (st.x0 + st.x1) / 2 : (to as number)) - b.w / 2);
+        b.y = (st ? st.floor : FLOOR.ground) - b.h; b.rx = b.ry = 0;
+        scene.player.vx = scene.player.vy = 0; scene.player.state = 'ground';
+        scene.camX = scene.player.cx; scene.camY = b.y;
+        scene.render(); return scene.near;
+      },
+      player: () => ({ x: scene.player.body.x, y: scene.player.body.y, state: scene.player.state, feet: scene.player.feet }),
+      /** frame-exact stepping for tests: hold `mask` for n frames (no real-time input) */
+      step: (n: number, mask = 0) => {
+        let prev = (scene as any)._testPrev ?? 0;
+        for (let i = 0; i < n; i++) {
+          scene.player.update(scene.map, { held: mask, pressed: mask & ~prev, released: prev & ~mask }, [], () => {});
+          prev = mask;
+        }
+        (scene as any)._testPrev = prev;
+        scene.render();
+        return { x: scene.player.body.x, feet: scene.player.feet, state: scene.player.state };
+      },
       open: (id: StationId) => scene.open(id),
       close: () => scene.closePanel(),
       isOpen: () => isStationOpen(),

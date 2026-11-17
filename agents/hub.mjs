@@ -1,5 +1,6 @@
 // Cantina hub checks shared by the agents.
 import { openGame, sleep } from './lib.mjs';
+import { hubClimb } from './hubclimb.mjs';
 
 /** Developer: every station opens, every enabled button can really be clicked, buying works, launch + return work. */
 export async function hubChecks(browser, url, rep) {
@@ -9,6 +10,11 @@ export async function hubChecks(browser, url, rep) {
   await page.reload();
   await page.waitForFunction(() => window.__ST?.scene === 'cantina', null, { timeout: 30000 });
   res.loadsInCantina = true;
+  // every floor can be reached by playing (frame-exact), and dropping through a deck works
+  const climb = await hubClimb(page);
+  res.climb = climb;
+  res.floorsReachable = climb.middle === 528 && climb.top === 312 && climb.dropped > climb.top;
+  if (!res.floorsReachable) await rep.issue(page, { key: 'hub-climb', severity: 'blocker', title: `Cantina: a floor cannot be reached (${JSON.stringify(climb)})`, category: 'level' });
   const stations = await page.evaluate(() => __ST.stations().map((s) => s.id));
   res.stations = stations.length;
   for (const id of stations) {

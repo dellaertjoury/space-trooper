@@ -245,3 +245,130 @@ export function drawHangingLamp(): HTMLCanvasElement {
   c.fillStyle = '#ffe2a8'; c.beginPath(); c.ellipse(30, 93, 14, 4, 0, 0, 7); c.fill();
   return cv;
 }
+
+// =====================================================================================================
+// Three-floor hub (tile scale). Floors are bands of wall between the decks.
+// =====================================================================================================
+
+/** Wall art behind the three floors: warm panels, pipes, portholes (twin-sun dusk), entrance + hangar doors. */
+export function drawHubBackdrop(w: number, h: number, floors: number[], wallL = 48, wallR = w - 48): HTMLCanvasElement {
+  const [cv, c] = mk(w, h);
+  const rng = new Rng(7);
+  c.fillStyle = '#120a0d'; c.fillRect(0, 0, w, h);
+  const bands = [[48, floors[2]], [floors[2] + 16, floors[1]], [floors[1] + 16, floors[0]]];
+  bands.forEach(([y0, y1], bi) => {
+    const g = c.createLinearGradient(0, y0, 0, y1);
+    g.addColorStop(0, ['#24131a', '#2e1719', '#3a1c1c'][bi]); g.addColorStop(1, ['#3a1d20', '#46231f', '#4b2621'][bi]);
+    c.fillStyle = g; c.fillRect(wallL, y0, wallR - wallL, y1 - y0);
+    // panels
+    for (let x = wallL + 8; x < wallR - 60; x += 96) {
+      rect(c, x, y0 + 26, 88, y1 - y0 - 40, ['#341a1f', '#3e1f1f', '#47231f'][bi], 2.5, 6);
+      band(c, x + 4, y0 + 29, 80, 4, ['#4f2a2c', '#5a3027', '#6a3a2c'][bi]);
+      c.fillStyle = '#7d4a36'; for (const xx of [x + 10, x + 78]) { c.beginPath(); c.arc(xx, y0 + 40, 2, 0, 7); c.fill(); }
+    }
+    // a pipe run under each ceiling
+    rect(c, wallL, y0 + 6, wallR - wallL, 8, '#4a4d60', 2.5, 4);
+    band(c, wallL, y0 + 8, wallR - wallL, 2, '#7f84a0');
+    for (let x = wallL + 40; x < wallR; x += 170) rect(c, x, y0 + 3, 10, 14, '#2e2f3c', 2, 2);
+  });
+  // portholes (one per floor, away from the stations)
+  for (const [px, py] of [[480, floors[2] - 150], [470, floors[1] - 140], [830, floors[0] - 150]] as [number, number][]) {
+    const r = 30;
+    c.save(); c.beginPath(); c.arc(px, py, r, 0, Math.PI * 2); c.clip();
+    const sky = c.createLinearGradient(0, py - r, 0, py + r);
+    sky.addColorStop(0, '#2b1640'); sky.addColorStop(0.55, '#b5506a'); sky.addColorStop(0.8, '#f29a5e'); sky.addColorStop(1, '#ffd28a');
+    c.fillStyle = sky; c.fillRect(px - r, py - r, r * 2, r * 2);
+    c.fillStyle = '#ffe6b0'; c.beginPath(); c.arc(px - 8, py + 4, 7, 0, 7); c.fill();
+    c.fillStyle = '#ffc890'; c.beginPath(); c.arc(px + 9, py + 10, 4, 0, 7); c.fill();
+    c.fillStyle = '#5a2a40'; c.beginPath(); c.moveTo(px - r, py + 20); c.lineTo(px - 10, py + 12); c.lineTo(px + 14, py + 18); c.lineTo(px + r, py + 14); c.lineTo(px + r, py + r); c.lineTo(px - r, py + r); c.fill();
+    c.restore();
+    c.lineWidth = 6; c.strokeStyle = '#5b5f73'; c.beginPath(); c.arc(px, py, r + 3, 0, 7); c.stroke();
+    c.lineWidth = 2.5; c.strokeStyle = INK; c.beginPath(); c.arc(px, py, r + 6, 0, 7); c.stroke(); c.beginPath(); c.arc(px, py, r, 0, 7); c.stroke();
+  }
+  // bar back wall: neon sign + bottle shelves (ground floor, centre)
+  const by = floors[0];
+  for (const sy of [by - 112, by - 82]) {
+    rect(c, 540, sy, 220, 6, '#6b3d2a', 2.5, 2);
+    for (let x = 550; x < 750; x += 14 + rng.int(0, 6)) {
+      const bh = rng.int(12, 20), col = rng.pick(['#3fa36b', '#c94b3a', '#e0a33a', '#4a7fd1', '#9b59d0', '#d6d0b8']);
+      shape(c, () => c.roundRect(x, sy - bh, 7, bh, 2), col, 1.8);
+      band(c, x + 1.5, sy - bh + 3, 1.5, bh - 6, 'rgba(255,255,255,0.5)');
+    }
+  }
+  c.font = 'bold 16px Oswald, Impact, sans-serif'; c.textAlign = 'center';
+  c.lineWidth = 5; c.strokeStyle = INK; c.strokeText('THE RUSTY HYPERDRIVE', 650, by - 128);
+  c.fillStyle = '#ff9a5c'; c.fillText('THE RUSTY HYPERDRIVE', 650, by - 128);
+  // Scrapper awning (ground floor, left)
+  for (let i = 0; i < 6; i++) {
+    const x0 = 140 + i * 42;
+    shape(c, () => { c.moveTo(x0, by - 112); c.lineTo(x0 + 42, by - 112); c.lineTo(x0 + 39, by - 88); c.quadraticCurveTo(x0 + 21, by - 80, x0 + 3, by - 88); }, i % 2 ? '#d8b98a' : '#b5543c', 2.5);
+  }
+  rect(c, 136, by - 118, 260, 8, '#6b3d2a', 2.5, 2);
+  rect(c, 140, by - 110, 5, 110, '#5b5f73', 2); rect(c, 391, by - 110, 5, 110, '#5b5f73', 2);
+  // entrance door (ground, far left) and hangar door (top, far right)
+  for (const [dx, fy, label] of [[56, floors[0], 'EXIT'], [wallR - 52, floors[2], 'HANGAR']] as [number, number, string][]) {
+    rect(c, dx, fy - 92, 44, 92, '#2a2c38', 3, 5);
+    for (let y = fy - 84; y < fy - 6; y += 16) { band(c, dx + 4, y, 36, 2, '#4a4d60'); }
+    for (let y = fy - 92; y < fy; y += 20) { c.fillStyle = (y / 20) % 2 ? '#ffb347' : INK; c.fillRect(dx - 5, y, 5, 10); }
+    c.font = 'bold 10px Oswald, Impact, sans-serif'; c.fillStyle = '#ffd58a'; c.fillText(label, dx + 22, fy - 98);
+  }
+  return cv;
+}
+
+/** Decks and walls as tiles: solid = warm dark metal, one-way decks = thick plank floors with beams. */
+export function drawHubTiles(map: { w: number; h: number; get(x: number, y: number): number }, T: number): HTMLCanvasElement {
+  const [cv, c] = mk(map.w * T, map.h * T);
+  for (let ty = 0; ty < map.h; ty++) for (let tx = 0; tx < map.w; tx++) {
+    const t = map.get(tx, ty), X = tx * T, Y = ty * T;
+    if (t === 1) {
+      band(c, X, Y, T, T, '#1c1216');
+      band(c, X + 2, Y + 2, T - 4, T - 4, (tx + ty) % 2 ? '#24171b' : '#21151a');
+      if (map.get(tx, ty - 1) !== 1) { band(c, X, Y, T, 5, '#7a4632'); band(c, X, Y, T, 2, '#c27a4e'); band(c, X, Y + 5, T, 2, INK); }
+    } else if (t === 2) {
+      // plank deck: top lip, planks, dark underside; a support beam every 4 tiles
+      band(c, X, Y, T, 14, '#5a2f24');
+      band(c, X, Y, T, 3, '#c27a4e');
+      band(c, X, Y + 3, T, 2, '#8a5236');
+      band(c, X, Y + 12, T, 3, INK);
+      c.strokeStyle = 'rgba(20,14,30,0.6)'; c.lineWidth = 1; c.beginPath(); c.moveTo(X + (tx % 2 ? 6 : 16), Y + 5); c.lineTo(X + (tx % 2 ? 6 : 16), Y + 12); c.stroke();
+      const left = map.get(tx - 1, ty) !== 2, right = map.get(tx + 1, ty) !== 2;
+      if (tx % 4 === 0 && !left && !right) { rect(c, X + 9, Y + 14, 6, 8, '#3a3c4a', 1.5); }
+      if (left) band(c, X, Y, 2, 14, INK);
+      if (right) band(c, X + T - 2, Y, 2, 14, INK);
+    }
+  }
+  return cv;
+}
+
+/** Bar counter with stools (drawn in front of the bartender). */
+export function drawBarCounter(): HTMLCanvasElement {
+  const [cv, c] = mk(260, 48);
+  rect(c, 2, 2, 256, 10, '#8a5236', 2.5, 4);
+  band(c, 5, 4, 250, 3, '#c27a4e');
+  rect(c, 10, 12, 240, 34, '#5a2f24', 2.5, 3);
+  for (let x = 22; x < 240; x += 42) { rect(c, x, 17, 30, 24, '#4a2620', 2, 4); band(c, x + 3, 19, 24, 2, '#7a4632'); }
+  band(c, 12, 38, 236, 2, '#ff9a5c');
+  return cv;
+}
+
+/** Round holo-table (the hologram floats above it). */
+export function drawHoloTable(): HTMLCanvasElement {
+  const [cv, c] = mk(80, 30);
+  rect(c, 30, 10, 20, 20, '#3a3c4a', 2.5, 3);
+  shape(c, () => c.ellipse(40, 9, 36, 7, 0, 0, 7), '#4a4d60', 2.5);
+  shape(c, () => c.ellipse(40, 7, 28, 4.5, 0, 0, 7), '#2a5f7a', 2);
+  c.fillStyle = 'rgba(120,230,255,0.95)';
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; c.beginPath(); c.arc(40 + Math.cos(a) * 22, 7 + Math.sin(a) * 3.4, 1.4, 0, 7); c.fill(); }
+  return cv;
+}
+
+/** Armoury wall rack (the gear sprites hang on it). */
+export function drawArmouryRack(): HTMLCanvasElement {
+  const [cv, c] = mk(120, 92);
+  rect(c, 4, 2, 112, 70, '#2e2a33', 3, 6);
+  band(c, 8, 6, 104, 4, '#4a4552');
+  rect(c, 10, 38, 100, 4, '#5b5f73', 2, 2);
+  rect(c, 0, 72, 120, 20, '#3a2a26', 3, 4);
+  band(c, 4, 75, 112, 3, '#6b4a3a');
+  return cv;
+}

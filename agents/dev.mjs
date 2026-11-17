@@ -141,8 +141,9 @@ export async function runDev(browser, url, { seed = 23, fuzzRuns = 40, fuzzFrame
   log('7. cantina');
   const hub = await hubChecks(browser, url, rep);
   rep.metric('cantina', hub);
-  rep.check('Cantina: all stations usable', hub.stations === 5 && Object.values(hub).every((v) => typeof v !== 'object' || v.blocked === 0));
+  rep.check('Cantina: all stations usable', hub.stations === 5 && ['scrapper', 'forge', 'armoury', 'workshop', 'mission'].every((k) => hub[k] && hub[k].blocked === 0));
   rep.check('Cantina: buying works', !!hub.buy);
+  rep.check('Cantina: all three floors reachable by jumping', !!hub.floorsReachable, JSON.stringify(hub.climb));
   rep.check('Cantina: launch + return through the exit door', !!hub.launch && !!hub.return);
 
   // ---------------------------------------------------------------- 6. errors seen along the way
