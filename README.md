@@ -63,7 +63,12 @@ npm run agents       # all three agents -> public/agent-reports/latest.json (see
 npm run agent:hardcore
 ```
 
-The agents run automatically on GitHub after every push, and their report ships with the deployed game.
+### On GitHub
+
+- **Every push to `master`** only builds and publishes the game (about a minute). Pushes that only touch docs, `agents/` or `tools/` skip the deploy.
+- **Agents run only when you start them:** Actions tab → **Run test agents** → **Run workflow**. Pick `all`, `dev`, `hardcore` or `kid`, and tick *Quick mode* for a shorter run. The report is saved to `public/agent-reports/latest.json`, the game is redeployed, and the results show up under **F9**. Agents you didn't run keep their previous results.
+
+Repo settings: *Settings → Pages → Source* must be **GitHub Actions**. For the agents workflow to save its report, *Settings → Actions → General → Workflow permissions* must be **Read and write**.
 
 ## Layout
 

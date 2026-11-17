@@ -1,10 +1,15 @@
-# On every push to main: build the game, let the three test agents play it,
-# then publish the game + the agents' report to GitHub Pages.
-name: Build, test with agents, deploy
+# Every push to master: build the game and publish it to GitHub Pages. About a minute.
+# The test agents do NOT run here. Start them by hand: Actions -> "Run test agents".
+name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [master]
+    paths-ignore: # changes that don't affect the game skip the deploy
+      - '**.md'
+      - 'agents/**'
+      - 'tools/**'
+      - '.github/workflows/agents.yml'
   workflow_dispatch:
 
 permissions:
@@ -17,31 +22,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npm ci --no-audit --no-fund
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: npm run build
-      - name: Run test agents (Developer, Hardcore, Kid)
-        run: npm run agents
-        continue-on-error: true # a bad report still deploys, so you can read it in the dashboard (F9)
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
-
-  deploy:
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - id: deployment
         uses: actions/deploy-pages@v4

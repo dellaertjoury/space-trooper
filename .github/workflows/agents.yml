@@ -1,0 +1,79 @@
+# Manual only: Actions -> "Run test agents" -> Run workflow.
+# Runs the chosen agent(s), saves the report to public/agent-reports/latest.json
+# (committed back to master), and redeploys the game so the report shows up under F9.
+name: Run test agents
+
+on:
+  workflow_dispatch:
+    inputs:
+      agent:
+        description: Which agent to run
+        type: choice
+        options: [all, dev, hardcore, kid]
+        default: all
+      quick:
+        description: Quick mode (shorter runs, fewer fuzz rounds)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  agents:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+
+      - name: Cache Playwright browser
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Install Chromium system libraries
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - run: npm run build
+      - name: Run agents (${{ inputs.agent }})
+        run: node agents/run-all.mjs ${{ inputs.agent != 'all' && inputs.agent || '' }}
+        env:
+          QUICK: ${{ inputs.quick && '1' || '' }}
+        continue-on-error: true # a failing report is still saved and published
+
+      - name: Save report to the repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add public/agent-reports/latest.json
+          git diff --cached --quiet || git commit -m "Agent report (${{ inputs.agent }}) [skip ci]"
+          git push || echo "Could not push the report (master moved on); it is still attached to this run."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-report
+          path: public/agent-reports/latest.json
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
