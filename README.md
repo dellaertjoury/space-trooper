@@ -4,37 +4,39 @@ A Dead Cells-style roguelite platformer in a space-opera universe, built for the
 
 **Play:** `https://dellaertjoury.github.io/space-trooper/` (after the first deploy)
 
-## Status: Phase 1 (MVP: movement, weapons, style)
+## Status: Phase 3 started (enemies)
 
-The Trooper on the Training Deck can run, jump, double jump, roll (with invincibility frames), wall slide, wall jump, vault low walls, grab and climb ledges, drop through platforms, swing a three-hit vibro-saber combo, fire the blaster, and swap weapons. Training droids take hits.
+The Trooper on the Training Deck can run, jump, flip (double jump), roll (with invincibility frames), wall slide, wall jump, vault low walls, grab and climb ledges, drop through platforms, swing a three-hit saber combo, fire the blaster, and swap weapons. Two Dune Raiders patrol the deck: the **brute** (staff, closes in and swings) and the **gunner** (rifle, keeps its distance and fires red bolts). Both glow red while winding up: roll through the attack or jump it. Supply crates break open for credits; training droids still take hits.
 
 ## The Cantina (hub)
 
-Every session starts in the Cantina. Walk to a station and press **Up / E** (or click its sign):
+Every session starts in the Cantina, two floors joined by a stairwell in the middle (stand in the doorway, **Up** to go upstairs, **Down** to come down).
 
-| Station | What it does |
-| --- | --- |
-| Scrapper Stall | Buy crystals, droid parts, ingots and an overshield for the next run (credits) |
-| Armoury | Craft and upgrade 4 gear pieces: chest (+health), shoulder (+saber damage), gauntlets (+blaster damage), boots (faster roll recovery) |
-| Droid Workshop | Build and deploy a companion: Turret drone (shoots) or Medic droid (+health) |
-| Saber Forge | Blade colour (blue, green, red, purple) and form (single blade or vibro-staff) |
-| Mission Table | Launch a run with your loadout (also the green START MISSION button) |
+| Floor | Station | What it does |
+| --- | --- | --- |
+| Ground | The bar | The Rusty Hyperdrive. The bar droid waves when you come by |
+| Ground | Mission Control | Launch a run with your loadout (also the green START MISSION button) |
+| Upper | Scrapper Stall | Buy crystals, droid parts, ingots and an overshield for the next run (credits) |
+| Upper | Saber Forge | Blade colour (blue, green, red, purple) and form (single blade or vibro-staff) |
+| Upper | Armoury | Craft and upgrade 4 gear pieces: chest (+health), shoulder (+saber damage), gauntlets (+blaster damage), boots (faster roll recovery) |
+| Upper | Droid Workshop | Build and deploy a companion: Turret drone (shoots blue bolts) or Medic droid (+health) |
 
-Runs pay 15 credits per destroyed droid. Leave through the CANTINA door at the end of the Training Deck, or pause and press C. Progress is saved in your browser. The testing build starts you with 400 credits, 5 crystals, 1 rare crystal, 10 droid parts and 6 ingots. `?scene=run` skips the Cantina.
+Press **Space** at a station (or click its sign) to use it. Runs pay credits per enemy and per crate. Leave through the CANTINA door at the end of the Training Deck with **Space**, or pause and press C. If you fall, you're carried back to the Cantina and keep what you earned. Progress is saved in your browser. The testing build starts you with 400 credits, 5 crystals, 1 rare crystal, 10 droid parts and 6 ingots. `?scene=run` skips the Cantina.
 
 ## Controls
 
-| Action | Keyboard | Gamepad |
+| Action | Keyboard (AZERTY or QWERTY) | Gamepad |
 | --- | --- | --- |
-| Move | A D / arrows | stick / d-pad |
-| Jump (again in the air) | Space / Z | A |
-| Drop through a platform | Down + Jump | Down + A |
-| Roll | K / Shift / C | B / RB / RT |
-| Attack | J / X | X |
-| Swap saber / blaster | Q / L | Y |
-| Climb a ledge / let go | Up or Jump / Down | |
+| Move | ← → | stick / d-pad |
+| Jump (again in the air: flip) | ↑ | A |
+| Roll (dodge) | ↓ | B / RB / RT |
+| Drop through a platform | ↓ while standing still on it | d-pad down |
+| Attack / fire / use (stations, doors) | Space | X |
+| Swap saber / blaster | A | Y |
+| Abilities (coming) | Z  E  R | |
+| Climb a ledge / let go | ↑ / ↓ | |
+| Stairs in the Cantina | ↑ / ↓ in the doorway | d-pad up / down |
 | Pause (R restart, C back to Cantina) | Esc / P | Start |
-| Use a Cantina station | Up / E / Enter | d-pad up |
 | Help | H | |
 | **Log an issue** | **F8** | **Select + Y** |
 | **Issue dashboard** | **F9** | **Select + X** |
@@ -79,7 +81,7 @@ src/scenes    rendering, effects, HUD
 src/art       procedural tiles/backdrop/FX (placeholder until real tilesets)
 src/debug     issue logger + dashboard
 agents/       kid.mjs, hardcore.mjs, dev.mjs, run-all.mjs
-tools/art     sheet_extract.py + assemble_trooper.py (action sheet -> sprite sheet), source art, older conversion scripts
+tools/art     chars_extract.py (player + enemy sheet -> sprite sheets), props2_extract.py (props + bar droid), source art, older scripts
 tools/blender rig/render scripts for the 3D model route (shelved)
 ```
 

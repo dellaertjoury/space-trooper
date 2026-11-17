@@ -19,18 +19,27 @@ export interface InputFrame {
   released: number;
 }
 
+/**
+ * Keyboard (works on AZERTY and QWERTY):
+ *   arrows  move · Up jump (and stairs) · Down roll (drop through a platform when standing still on one)
+ *   Space   attack / fire / interact
+ *   A       swap saber / blaster (ability slot 1) · Z E R reserved for abilities
+ * Arrows and Space go by physical key; letters go by the character they type, so A is A on any layout.
+ */
 export const KEYMAP: Record<string, number> = {
-  ArrowLeft: BTN.LEFT, KeyA: BTN.LEFT,
-  ArrowRight: BTN.RIGHT, KeyD: BTN.RIGHT,
-  ArrowUp: BTN.UP, KeyW: BTN.UP,
-  ArrowDown: BTN.DOWN, KeyS: BTN.DOWN,
-  Space: BTN.JUMP, KeyZ: BTN.JUMP,
-  KeyJ: BTN.ATTACK, KeyX: BTN.ATTACK,
-  KeyK: BTN.ROLL, ShiftLeft: BTN.ROLL, ShiftRight: BTN.ROLL, KeyC: BTN.ROLL,
-  KeyQ: BTN.SWAP, KeyL: BTN.SWAP,
+  ArrowLeft: BTN.LEFT,
+  ArrowRight: BTN.RIGHT,
+  ArrowUp: BTN.UP | BTN.JUMP,
+  ArrowDown: BTN.DOWN | BTN.ROLL,
+  Space: BTN.ATTACK,
 };
+export const LETTERMAP: Record<string, number> = { a: BTN.SWAP };
 
-/** Standard gamepad mapping: A jump, X attack, B / RT roll, Y swap. */
+function keyBits(e: KeyboardEvent): number | undefined {
+  return KEYMAP[e.code] ?? (e.key && e.key.length === 1 ? LETTERMAP[e.key.toLowerCase()] : undefined);
+}
+
+/** Standard gamepad mapping: A jump, X attack / interact, B / RB / RT roll, Y swap, d-pad up = stairs, down = drop. */
 function padMask(): number {
   let m = 0;
   const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];
@@ -72,14 +81,14 @@ export class InputSystem {
 
   constructor(target: Window = window) {
     target.addEventListener('keydown', (e) => {
-      const b = KEYMAP[e.code];
+      const b = keyBits(e);
       if (b === undefined) return;
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
       this.down |= b;
       this.latched |= b;
     });
     target.addEventListener('keyup', (e) => {
-      const b = KEYMAP[e.code];
+      const b = keyBits(e);
       if (b !== undefined) this.down &= ~b;
     });
     target.addEventListener('blur', () => { this.down = 0; });

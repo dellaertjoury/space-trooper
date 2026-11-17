@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
 import { InputSystem, padCombo, rle, unrle } from '../core/input';
-import { Sim, simulate } from '../game/sim';
+import { Sim, SimOptions, simulate } from '../game/sim';
 import { GameEvent } from '../game/player';
 import { drawBackdrop, drawBlade, drawBolt, drawDummy, drawGlow, drawLamp, drawLevel, drawSlash, drawSpark } from '../art/procedural';
 import { Issue, IssueTracker } from '../debug/issues';
 import { DEFAULT_LOADOUT, Loadout, loadoutFrom, loadProfile, Profile, SABER_COLORS, saveProfile } from '../game/profile';
-import { preloadTrooper, TrooperView } from './trooperView';
+import { EnemyView, preloadChar, preloadTrooper, TrooperView } from './trooperView';
 import { shared } from './shared';
 
 declare const __BUILD__: string;
@@ -35,6 +35,9 @@ export class GameScene extends Phaser.Scene {
   private bolts: Phaser.GameObjects.Image[] = [];
   private dummies: Phaser.GameObjects.Image[] = [];
   private dummyBars: Phaser.GameObjects.Graphics[] = [];
+  private enemyViews: EnemyView[] = [];
+  private crateViews: Phaser.GameObjects.Image[] = [];
+  private deadT = 0;
   private bgFar!: Phaser.GameObjects.TileSprite;
   private bgNear!: Phaser.GameObjects.TileSprite;
   private hud!: Phaser.GameObjects.Container;
@@ -52,6 +55,10 @@ export class GameScene extends Phaser.Scene {
 
   preload() {
     preloadTrooper(this);
+    preloadChar(this, 'raider');
+    preloadChar(this, 'gunner');
+    for (const c of ['grey', 'brown', 'green', 'blue', 'maroon']) for (const k of [`crate_${c}`, `crate_${c}_open`])
+      if (!this.textures.exists('h2_' + k)) this.load.image('h2_' + k, `assets/hub2/${k}.png`);
     if (!this.textures.exists('droid_turret')) this.load.image('droid_turret', 'assets/cantina/droid_turret.png');
     for (const k of ['icon_health', 'icon_credit', 'icon_crystal_blue', 'icon_crystal_purple', 'icon_droidpart', 'icon_ingot', 'saber', 'blaster_heavy'])
       this.load.image('ui_' + k, `assets/ui/${k}.png`);
@@ -61,7 +68,7 @@ export class GameScene extends Phaser.Scene {
     this.webgl = this.game.renderer.type === Phaser.WEBGL;
     this.testMode = new URLSearchParams(location.search).has('test');
     this.leaving = false;
-    this.bolts = []; this.dummies = []; this.dummyBars = []; this.resTexts = [];
+    this.bolts = []; this.dummies = []; this.dummyBars = []; this.resTexts = []; this.enemyViews = []; this.crateViews = []; this.deadT = 0;
     // test mode always uses the default loadout so agent runs are comparable
     this.profile = this.testMode ? null : loadProfile();
     this.loadout = data?.loadout ?? (this.profile ? loadoutFrom(this.profile) : DEFAULT_LOADOUT);
@@ -78,6 +85,8 @@ export class GameScene extends Phaser.Scene {
     tex('bgNear', drawBackdrop(1280, VIEW_H, 1));
     tex('blade', drawBlade());
     tex('bolt', drawBolt());
+    tex('boltGreen', drawBolt('#3fdc6a'));
+    tex('boltBlue', drawBolt('#3f9cff'));
     tex('slash', drawSlash());
     tex('slash3', drawSlash(42, 9));
     tex('dummy', drawDummy());
@@ -118,6 +127,8 @@ export class GameScene extends Phaser.Scene {
       this.dummyBars.push(this.add.graphics());
     }
 
+    this.buildActors();
+
     // weapons are drawn into the Trooper's attack/shoot frames; these stay for the asset checks only
     this.blaster = this.add.image(0, 0, 'blade').setVisible(false);
     this.blade = this.add.image(0, 0, 'blade').setVisible(false);
@@ -132,6 +143,7 @@ export class GameScene extends Phaser.Scene {
       g.fillStyle(0xff9a3c, 0.85).fillRect(ex.x + 4, ex.y + 2, ex.w - 8, 3);
       g.lineStyle(2, 0xb0843f).strokeRoundedRect(ex.x, ex.y - 2, ex.w, ex.h + 2, 4);
       this.add.image(ex.x + ex.w / 2, ex.y + 10, 'glowWarm').setBlendMode(Phaser.BlendModes.ADD).setScale(0.3).setAlpha(0.8);
+      this.add.text(ex.x + ex.w / 2, ex.y - 26, 'SPACE', { fontFamily: 'Oswald, Impact, sans-serif', fontSize: '8px', color: '#140e1e', backgroundColor: '#ffd58a', padding: { x: 3, y: 0 } }).setOrigin(0.5).setResolution(3);
       this.add.text(ex.x + ex.w / 2, ex.y - 14, 'CANTINA', { fontFamily: 'Oswald, Impact, sans-serif', fontSize: '11px', color: '#ffd58a', stroke: '#140e1e', strokeThickness: 3 }).setOrigin(0.5).setResolution(3);
     }
     if (this.webgl) this.cameras.main.postFX.addVignette(0.5, 0.5, 0.92, 0.3);
@@ -180,11 +192,15 @@ export class GameScene extends Phaser.Scene {
       this.tick(this.input2.sample(forced));
     }
     if (this.sim.exitRequested && !this.leaving) this.leaveRun();
+    if (this.sim.player.state === 'dead' && !this.leaving && ++this.deadT === 1) {
+      this.banner.setText('DEFEATED  ·  back to the Cantina');
+      this.time.delayedCall(1800, () => this.leaveRun(true));
+    }
     this.render();
   }
 
   /** Back to the Cantina: bank what this run earned. */
-  leaveRun() {
+  leaveRun(defeated = false) {
     if (this.leaving || this.testMode) return;
     this.leaving = true;
     const st = this.sim.stats;
@@ -194,7 +210,7 @@ export class GameScene extends Phaser.Scene {
     p.bestKills = Math.max(p.bestKills, st.kills);
     saveProfile(p);
     this.cameras.main.fadeOut(350, 8, 6, 12);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('cantina', { result: { credits: st.credits, kills: st.kills } }));
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('cantina', { result: { credits: st.credits, kills: st.kills, defeated } }));
   }
 
   /** One simulation frame, including hit-stop (input pressed during hit-stop is kept for the next frame). */
@@ -212,6 +228,8 @@ export class GameScene extends Phaser.Scene {
 
   restart(seed: number, loadout: Loadout = this.loadout) {
     this.sim = new Sim(seed, loadout);
+    this.deadT = 0;
+    this.buildActors();
     this.input2.record = [];
     this.input2.resetEdges();
     this.userPaused = false;
@@ -227,6 +245,15 @@ export class GameScene extends Phaser.Scene {
     if (i.start) { this.sim.teleport(i.start.tx, i.start.ty); this.snapCamera(); }
     this.replayQueue = unrle(i.inputsFull);
     this.banner.setText(`REPLAY · ${i.title.slice(0, 40)}`);
+  }
+
+  /** Sprites for the sim's enemies and crates (rebuilt on restart / replay). */
+  private buildActors() {
+    for (const v of this.enemyViews) v.destroy();
+    for (const c of this.crateViews) c.destroy();
+    this.enemyViews = this.sim.enemies.map((e) => new EnemyView(this, e));
+    this.crateViews = this.sim.crates.map((c) => this.add.image(c.x + c.w / 2, c.y + c.h, 'h2_crate_' + c.color).setOrigin(0.5, 1).setDepth(1.5));
+    for (const im of this.crateViews) im.setScale(26 / im.height);
   }
 
   // ------------------------------------------------------------ rendering
@@ -246,16 +273,26 @@ export class GameScene extends Phaser.Scene {
       this.droneSprite.setPosition(sim.drone.x, sim.drone.y + Math.sin(sim.frame / 12) * 2).setFlipX(p.facing < 0);
     }
 
-    // bolts
-    while (this.bolts.length < sim.bolts.length) {
-      const im = this.add.image(0, 0, 'bolt').setDepth(4).setScale(0.5);
-      if (this.webgl) im.preFX?.addGlow(0xff4a4a, 3, 0, false, 0.1, 8);
-      this.bolts.push(im);
-    }
+    // bolts: the Trooper's blaster is green, the turret drone's blue, the raiders' red
+    while (this.bolts.length < sim.bolts.length) this.bolts.push(this.add.image(0, 0, 'bolt').setDepth(4).setScale(0.5));
     this.bolts.forEach((im, i) => {
       const bo = sim.bolts[i];
       im.setVisible(!!bo);
-      if (bo) im.setPosition(bo.x, bo.y).setRotation(Math.atan2(bo.vy, Math.abs(bo.vx)) * Math.sign(bo.vx || 1)).setFlipX(bo.vx < 0).setTint(bo.drone ? 0x8af0ff : 0xffffff);
+      if (!bo) return;
+      const key = bo.enemy ? 'bolt' : bo.drone ? 'boltBlue' : 'boltGreen';
+      if (im.texture.key !== key) {
+        im.setTexture(key);
+        if (this.webgl) { im.preFX?.clear(); im.preFX?.addGlow(bo.enemy ? 0xff4a4a : bo.drone ? 0x3f9cff : 0x3fdc6a, 3, 0, false, 0.1, 8); }
+      }
+      im.setPosition(bo.x, bo.y).setRotation(Math.atan2(bo.vy, Math.abs(bo.vx)) * Math.sign(bo.vx || 1)).setFlipX(bo.vx < 0);
+    });
+    for (const v of this.enemyViews) v.update();
+    sim.crates.forEach((c, i) => {
+      const im = this.crateViews[i];
+      if (!im) return;
+      const key = 'h2_crate_' + c.color + (c.open ? '_open' : '');
+      if (im.texture.key !== key) { im.setTexture(key); im.setScale(26 / im.height); }
+      if (c.flash > 0) im.setTintFill(0xffffff); else im.clearTint();
     });
 
     // dummies
@@ -299,23 +336,35 @@ export class GameScene extends Phaser.Scene {
       case 'jump': puff(e.x, e.y, 6, 0x8a93ad, 1.2, 0.3); break;
       case 'doublejump': puff(e.x, e.y, 10, 0x46e6ff, 1.6, 0.2, 260); break;
       case 'walljump': puff(e.x - (e.dir ?? 0) * 12, e.y, 6, 0xd6ecff, 0.8, 1.2); break;
-      case 'land': if ((e.dmg ?? 0) > 6) { puff(e.x, e.y, 8, 0x8a93ad, 1.8, 0.3); if ((e.dmg ?? 0) > 10) this.cameras.main.shake(80, 0.002); } break;
-      case 'roll': puff(e.x - (e.dir ?? 1) * 8, e.y, 5, 0x8a93ad, 1.2, 0.3); break;
-      case 'slash': {
-        const p = this.sim.player.body, dir = e.dir ?? 1;
-        const st = e.stage ?? 1;
-        const s = this.add.image(p.x + p.w / 2 + dir * (st === 3 ? 30 : 24), p.y + (st === 2 ? 14 : 26), st === 3 ? 'slash3' : 'slash')
-          .setFlipX(dir < 0).setAngle(dir * (st === 1 ? 30 : st === 2 ? -40 : 80)).setDepth(6).setBlendMode(Phaser.BlendModes.ADD).setScale(0.5).setAlpha(0.7);
-        if (this.webgl) s.preFX?.addGlow(0x46e6ff, 4, 0, false, 0.1, 10);
-        this.tweens.add({ targets: s, alpha: 0, scale: 0.58, duration: 140, onComplete: () => s.destroy() });
+      case 'land': if ((e.dmg ?? 0) > 6) puff(e.x, e.y, 8, 0x8a93ad, 1.8, 0.3); break;
+      case 'hurt': {
+        puff(e.x, e.y, 10, 0xff5a5a, 1.6, 1, 260);
+        this.cameras.main.shake(90, 0.004);
+        this.cameras.main.flash(90, 120, 20, 20, false);
+        const t = this.add.text(e.x, e.y - 14, '-' + e.dmg, { fontFamily: 'monospace', fontSize: '13px', fontStyle: 'bold', color: '#ff6a6a', stroke: '#140e1e', strokeThickness: 3 }).setOrigin(0.5).setDepth(7).setResolution(3);
+        this.tweens.add({ targets: t, y: e.y - 40, alpha: 0, duration: 700, onComplete: () => t.destroy() });
         break;
       }
+      case 'loot': {
+        puff(e.x, e.y, 10, 0xffd58a, 1.4, 1.4, 360);
+        const t = this.add.text(e.x, e.y - 6, `+${e.dmg} credits`, { fontFamily: 'monospace', fontSize: '11px', fontStyle: 'bold', color: '#ffd58a', stroke: '#140e1e', strokeThickness: 3 }).setOrigin(0.5).setDepth(7).setResolution(3);
+        this.tweens.add({ targets: t, y: e.y - 36, alpha: 0, duration: 900, onComplete: () => t.destroy() });
+        break;
+      }
+      case 'enemyshoot': {
+        const f = this.add.image(e.x, e.y, 'spark').setTint(0xff6a5a).setScale(1.4).setDepth(6).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: f, alpha: 0, scale: 0.5, duration: 90, onComplete: () => f.destroy() });
+        break;
+      }
+      case 'death': this.cameras.main.shake(200, 0.006); break;
+      case 'roll': puff(e.x - (e.dir ?? 1) * 8, e.y, 5, 0x8a93ad, 1.2, 0.3); break;
+      case 'slash': break; // the swing arc is drawn into the Trooper's saber frames (tinted by the crystal)
       case 'shoot': {
-        const f = this.add.image(e.x + (e.dir ?? 1) * 4, e.y, 'spark').setTint(0xffd0a0).setScale(1.5).setDepth(6).setBlendMode(Phaser.BlendModes.ADD);
+        const f = this.add.image(e.x + (e.dir ?? 1) * 4, e.y, 'spark').setTint(0x9affb0).setScale(1.5).setDepth(6).setBlendMode(Phaser.BlendModes.ADD);
         this.tweens.add({ targets: f, alpha: 0, scale: 0.5, duration: 80, onComplete: () => f.destroy() });
         break;
       }
-      case 'boltwall': puff(e.x, e.y, 6, 0xff7a5a, 0.8, 1); break;
+      case 'boltwall': puff(e.x, e.y, 6, 0xc8ffd0, 0.8, 1); break;
       case 'hit': {
         puff(e.x, e.y + 20, 8, 0xffffff, 1.4, 1, 220);
         const big = (e.dmg ?? 0) >= 20;
@@ -365,7 +414,7 @@ export class GameScene extends Phaser.Scene {
     };
     this.slotSaber = slot(12, 'saber', 'SABER');
     this.slotBlaster = slot(68, 'blaster_heavy', 'BLASTER');
-    c.add(this.add.text(126, VIEW_H - 40, 'Q / Y swap', { fontFamily: 'monospace', fontSize: '10px', color: '#8d97b3' }).setResolution(3));
+    c.add(this.add.text(126, VIEW_H - 40, 'A / Y swap', { fontFamily: 'monospace', fontSize: '10px', color: '#8d97b3' }).setResolution(3));
     c.add(this.add.text(VIEW_W - 10, VIEW_H - 18, `${BUILD}  ·  F8 log issue  ·  F9 dashboard  ·  H controls  ·  Esc pause`, { fontFamily: 'monospace', fontSize: '10px', color: '#8d97b3' }).setOrigin(1, 0).setResolution(3));
     this.banner = this.add.text(VIEW_W / 2, 70, '', { fontFamily: 'monospace', fontSize: '16px', fontStyle: 'bold', color: '#ffd58a', stroke: '#140e1e', strokeThickness: 4 }).setOrigin(0.5).setResolution(3);
     c.add(this.banner);
@@ -375,14 +424,15 @@ export class GameScene extends Phaser.Scene {
     h.add(frame(0, 0, 460, 250));
     const lines = [
       'CONTROLS                 KEYBOARD          GAMEPAD',
-      'Move                     A D / arrows      stick / d-pad',
-      'Jump  (again in air)     Space / Z         A',
-      'Drop through platform    Down + Jump       Down + A',
-      'Roll (dodge)             K / Shift / C     B / RB / RT',
-      'Attack                   J / X             X',
-      'Swap saber / blaster     Q / L             Y',
-      'Wall jump                Jump on a wall',
-      'Ledge: climb / let go    Up or Jump / Down',
+      'Move                     ← →               stick / d-pad',
+      'Jump  (again: flip)      ↑                 A',
+      'Roll (dodge)             ↓                 B / RB / RT',
+      'Drop through platform    ↓ standing still  d-pad down',
+      'Attack / fire / use      Space             X',
+      'Swap saber / blaster     A                 Y',
+      'Abilities (coming)       Z  E  R',
+      'Wall jump                ↑ on a wall',
+      'Ledge: climb / let go    ↑ / ↓',
       'Pause                    Esc / P           Start',
       'Log an issue             F8                Select + Y',
       'Issue dashboard          F9                Select + X',
@@ -481,13 +531,13 @@ function exposeTestApi(scene: GameScene) {
     record: () => rle(scene.input2.record),
     teleport: (tx: number, ty: number) => { scene.sim.teleport(tx, ty); scene.input2.record = []; scene.snap(); },
     /** headless simulation (no rendering): returns final state, hash and any invariant violations */
-    simulate: (seed: number, masks: number[], start?: { tx: number; ty: number }) => simulate(seed, masks, start),
-    simulateMany: (jobs: { seed: number; masks: number[]; start?: { tx: number; ty: number } }[]) => jobs.map((j) => simulate(j.seed, j.masks, j.start)),
+    simulate: (seed: number, masks: number[], start?: { tx: number; ty: number }, opts?: SimOptions) => simulate(seed, masks, start, 1, undefined, opts),
+    simulateMany: (jobs: { seed: number; masks: number[]; start?: { tx: number; ty: number }; opts?: SimOptions }[]) => jobs.map((j) => simulate(j.seed, j.masks, j.start, 1, undefined, j.opts)),
     level: () => ({ w: scene.sim.map.w, h: scene.sim.map.h, tiles: Array.from(scene.sim.map.tiles), spawn: scene.sim.level.spawn, dummies: scene.sim.level.dummies }),
     objects: () => scene.children.length,
     tweens: () => scene.tweens.getTweens().length,
     paused: () => scene.isPaused(),
-    textures: () => ['trooper', 'trooper_glow', 'trooper_edge', 'trooper_dual', 'level', 'bolt', 'dummy', 'ui_icon_health', 'ui_saber', 'ui_blaster_heavy'].map((k) => [k, scene.textures.exists(k) && scene.textures.get(k).key !== '__MISSING']),
+    textures: () => ['trooper', 'trooper_glow', 'trooper_halo', 'trooper_core', 'raider', 'gunner', 'h2_crate_brown', 'level', 'bolt', 'boltGreen', 'dummy', 'ui_icon_health', 'ui_saber', 'ui_blaster_heavy'].map((k) => [k, scene.textures.exists(k) && scene.textures.get(k).key !== '__MISSING']),
     addIssue: (i: Partial<Issue> & { title: string }) => scene.tracker.add(i),
     screenshot: () => scene.screenshot(),
   };

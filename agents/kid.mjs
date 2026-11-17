@@ -4,7 +4,8 @@
 import { openGame, Report, rng, sleep } from './lib.mjs';
 import { hubMash } from './hub.mjs';
 
-const KEYS = { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', jump: 'Space', attack: 'KeyJ', roll: 'KeyK', swap: 'KeyQ', pause: 'Escape', help: 'KeyH' };
+// the real keyboard layout: arrows move, Up jumps, Down rolls, Space attacks, A swaps
+const KEYS = { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', jump: 'ArrowUp', attack: 'Space', roll: 'ArrowDown', swap: 'KeyA', pause: 'Escape', help: 'KeyH' };
 
 export async function runKid(browser, url, { seconds = 45, seed = 7 } = {}) {
   const { page, consoleErrors } = await openGame(browser, url, { test: false });
@@ -33,7 +34,7 @@ export async function runKid(browser, url, { seconds = 45, seed = 7 } = {}) {
     async pauseSpam() { const d = r.pick(['left', 'right']); await down(d); for (let i = 0; i < r.int(2, 6); i++) await tap('pause', 50); await up(d); await sleep(150); if (await page.evaluate(() => __ST.paused())) await tap('pause'); },
     async helpToggle() { await tap('help'); await sleep(400); await tap('help'); },
     async climbAttempt() { const d = r.pick(['left', 'right']); await down(d); await down('jump'); await sleep(r.int(300, 700)); await up('jump'); await sleep(200); await tap('jump'); await tap('up'); await sleep(500); await releaseAll(); },
-    async dropThrough() { await down('down'); await tap('jump'); await sleep(400); await up('down'); },
+    async dropThrough() { await tap('down', 80); await sleep(400); },
   };
   const weights = [['runAway', 5], ['jumpMash', 5], ['attackMash', 3], ['swapSpam', 2], ['rollSpam', 3], ['everything', 2], ['oppositeDirections', 1], ['idle', 2], ['pauseSpam', 2], ['helpToggle', 1], ['climbAttempt', 3], ['dropThrough', 2]];
   const total = weights.reduce((a, [, w]) => a + w, 0);
@@ -43,11 +44,21 @@ export async function runKid(browser, url, { seconds = 45, seed = 7 } = {}) {
   let lastPos = null, sameSince = Date.now(), stateSince = Date.now(), lastState = '';
   const visited = new Set();
   const played = {};
+  let deaths = 0;
   while (Date.now() - t0 < seconds * 1000) {
     const name = pickBehaviour();
     played[name] = (played[name] ?? 0) + 1;
     try { await behaviours[name](); } catch (e) { consoleErrors.push('agent: ' + e.message); }
 
+    // ---- the kid got beaten by a raider: the game sends them to the Cantina; go again
+    if (await page.evaluate(() => window.__ST?.scene === 'cantina')) {
+      deaths++;
+      await releaseAll();
+      await page.evaluate(() => __ST.launch());
+      await page.waitForFunction(() => !!window.__ST?.state, null, { timeout: 20000 }).catch(() => null);
+      lastPos = null; continue;
+    }
+    if (!(await page.evaluate(() => !!window.__ST?.state))) { await sleep(500); continue; } // mid scene change
     // ---- observations after each behaviour
     const s = await page.evaluate(() => ({ st: __ST.state(), inv: __ST.invariants(), paused: __ST.paused() }));
     const p = s.st.player;
@@ -67,6 +78,7 @@ export async function runKid(browser, url, { seconds = 45, seed = 7 } = {}) {
     if (r.chance(0.25)) {
       await releaseAll();
       await sleep(700);
+      if (!(await page.evaluate(() => !!window.__ST?.state))) continue;
       const q = await page.evaluate(() => ({ st: __ST.state(), paused: __ST.paused() }));
       if (q.paused) { await tap('pause'); await sleep(300); }
       else if (q.st.player.state === 'ground' && Math.abs(q.st.player.vx) > 0.5) {
@@ -76,18 +88,19 @@ export async function runKid(browser, url, { seconds = 45, seed = 7 } = {}) {
   }
   await releaseAll();
 
-  // the Cantina: mash everything, the hub must survive
-  const hub = await hubMash(browser, url, rep, r, 15);
-  rep.metric('cantina', hub);
-  rep.check('Cantina survives button mashing', !rep.issues.some((i) => /Cantina/.test(i.title)) && hub.endedIn !== 'unknown', hub.endedIn);
-
   for (const e of consoleErrors) await rep.issue(page, { key: 'console:' + e.slice(0, 80), severity: 'blocker', title: `Console error: ${e.slice(0, 90)}`, category: 'crash', screenshot: false });
   rep.metric('seconds', seconds);
   rep.metric('behaviours', played);
+  rep.metric('deaths', deaths);
   rep.metric('tilesVisited', visited.size);
   rep.metric('fps', await page.evaluate(() => __ST.fps()));
   rep.check('no crashes', consoleErrors.length === 0);
   rep.check('no stuck states', !rep.issues.some((i) => i.category === 'soft-lock'));
-  await page.close();
+  await page.close(); // free the (software) GPU before the next page
+
+  // the Cantina: mash everything, the hub must survive
+  const hub = await hubMash(browser, url, rep, r, 15);
+  rep.metric('cantina', hub);
+  rep.check('Cantina survives button mashing', !rep.issues.some((i) => /Cantina/.test(i.title)) && hub.endedIn !== 'unknown', hub.endedIn);
   return rep;
 }

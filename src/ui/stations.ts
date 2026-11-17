@@ -1,5 +1,5 @@
 /**
- * Station panels for the Cantina: Scrapper Stall, Armoury, Droid Workshop, Saber Forge, Mission Table.
+ * Station panels for the Cantina: Scrapper Stall, Armoury, Droid Workshop, Saber Forge, Mission Control.
  * Plain DOM over the canvas (crisp text, mouse + keyboard + gamepad).
  */
 import {
@@ -20,7 +20,7 @@ const TITLES: Record<StationId, [string, string]> = {
   armoury: ['Armoury', 'Vorr-steel plates from the Iron Clans. Upgrade with ingots.'],
   workshop: ['Droid Workshop', 'Build a companion from droid parts. One can join each run.'],
   forge: ['Saber Forge', 'Tune your vibro-saber: blade colour and form.'],
-  mission: ['Mission Table', 'Pick a mission. Your loadout comes with you.'],
+  mission: ['Mission Control', 'Pick a mission. Your loadout comes with you.'],
 };
 
 const MISSIONS = [
@@ -161,7 +161,7 @@ const BODY: Record<StationId, (p: Profile) => string> = {
         <div class="buy">${costHtml(p, it.cost)}<button data-act="buy" data-arg="${it.id}" ${canAfford(p, it.cost) ? '' : 'disabled'}>Buy</button></div>
       </div>`).join('')}
     </div>
-    <img class="npc" src="assets/cantina/scrapper_a.png" alt="">`,
+    <img class="npc" src="assets/hub/droid_tall_side.png" alt="">`,
 
   armoury: (p) => {
     const lo = loadoutFrom(p);

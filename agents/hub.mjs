@@ -10,11 +10,11 @@ export async function hubChecks(browser, url, rep) {
   await page.reload();
   await page.waitForFunction(() => window.__ST?.scene === 'cantina', null, { timeout: 30000 });
   res.loadsInCantina = true;
-  // every floor can be reached by playing (frame-exact), and dropping through a deck works
+  // both floors are reachable through the stairwell (frame-exact), and only through it
   const climb = await hubClimb(page);
   res.climb = climb;
-  res.floorsReachable = climb.middle === 528 && climb.top === 312 && climb.dropped > climb.top;
-  if (!res.floorsReachable) await rep.issue(page, { key: 'hub-climb', severity: 'blocker', title: `Cantina: a floor cannot be reached (${JSON.stringify(climb)})`, category: 'level' });
+  res.floorsReachable = !!climb.ok;
+  if (!res.floorsReachable) await rep.issue(page, { key: 'hub-climb', severity: 'blocker', title: `Cantina: the stairs don't connect the floors (${JSON.stringify(climb)})`, category: 'level' });
   const stations = await page.evaluate(() => __ST.stations().map((s) => s.id));
   res.stations = stations.length;
   for (const id of stations) {
@@ -53,7 +53,7 @@ export async function hubChecks(browser, url, rep) {
   if (run) {
     await page.evaluate(() => __ST.teleport(105, 26));
     await sleep(300);
-    await page.keyboard.down('ArrowUp'); await sleep(150); await page.keyboard.up('ArrowUp');
+    await page.keyboard.down('Space'); await sleep(150); await page.keyboard.up('Space');
     const back = await page.waitForFunction(() => window.__ST?.scene === 'cantina', null, { timeout: 30000 }).then(() => true).catch(() => false);
     const prof = back ? await page.evaluate(() => __ST.profile()) : null;
     res.return = back && prof.runs === 1 && prof.nextRunShield === 0;
@@ -67,7 +67,7 @@ export async function hubChecks(browser, url, rep) {
 /** Kid: mash everything in the Cantina for a while; the hub must survive and stay usable. */
 export async function hubMash(browser, url, rep, r, seconds = 15) {
   const { page, consoleErrors } = await openGame(browser, url, { hub: true });
-  const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyE', 'Enter', 'Escape', 'Space', 'KeyJ', 'KeyK', 'KeyQ', 'Tab'];
+  const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', 'Escape', 'Space', 'KeyA', 'KeyZ', 'KeyE', 'KeyR', 'Tab'];
   const t0 = Date.now();
   let opened = 0;
   while (Date.now() - t0 < seconds * 1000) {

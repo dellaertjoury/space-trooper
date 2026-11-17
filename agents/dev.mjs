@@ -143,8 +143,8 @@ export async function runDev(browser, url, { seed = 23, fuzzRuns = 40, fuzzFrame
   rep.metric('cantina', hub);
   rep.check('Cantina: all stations usable', hub.stations === 5 && ['scrapper', 'forge', 'armoury', 'workshop', 'mission'].every((k) => hub[k] && hub[k].blocked === 0));
   rep.check('Cantina: buying works', !!hub.buy);
-  rep.check('Cantina: all three floors reachable by jumping', !!hub.floorsReachable, JSON.stringify(hub.climb));
-  rep.check('Cantina: launch + return through the exit door', !!hub.launch && !!hub.return);
+  rep.check('Cantina: both floors joined by the stairs (and only the stairs)', !!hub.floorsReachable, JSON.stringify(hub.climb));
+  rep.check('Cantina: launch + return through the exit door (Space)', !!hub.launch && !!hub.return);
 
   // ---------------------------------------------------------------- 6. errors seen along the way
   for (const e of consoleErrors) await rep.issue(page, { key: 'console:' + e.slice(0, 80), severity: 'blocker', title: `Console error: ${e.slice(0, 90)}`, category: 'crash', screenshot: false });

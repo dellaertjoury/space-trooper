@@ -11,22 +11,23 @@ export const TUNE = {
   groundAccel: 0.7,
   groundDecel: 0.9,
   airAccel: 0.45,
-  gravity: 0.55,
-  apexGravity: 0.3, // floatier top of the jump while jump is held
-  maxFall: 11,
-  fastFall: 13,
-  jumpVel: -10.5,
-  doubleJumpVel: -9.2,
+  gravity: 0.46,
+  apexGravity: 0.2, // floatier top of the jump while jump is held
+  apexBand: 2.4,    // |vy| below this counts as the top of the jump
+  maxFall: 9.5,
+  fastFall: 12,
+  jumpVel: -9.4,
+  doubleJumpVel: -8.2,
   jumpCut: 0.45, // releasing jump early cuts upward speed
   coyoteFrames: 6,
   bufferFrames: 7,
-  rollFrames: 22,
-  rollSpeed: 6.5,
+  rollFrames: 24,
+  rollSpeed: 7,
   rollIframes: [2, 18] as [number, number],
   rollCooldown: 8,
   wallSlideMax: 2.2,
   wallJumpVx: 5.5,
-  wallJumpVy: -9.6,
+  wallJumpVy: -8.8,
   wallJumpLock: 10,
   climbFrames: 18,
   dropFrames: 12,
@@ -35,6 +36,8 @@ export const TUNE = {
 };
 
 const STAND_H = 56, ROLL_H = 22, W = 20;
+/** muzzle of the blaster relative to the hitbox centre / top, measured on the shooting frames */
+export const MUZZLE = { dx: 30, dy: 11 };
 
 export type Weapon = 'blaster' | 'saber';
 export type PState = 'ground' | 'air' | 'roll' | 'wall' | 'ledge' | 'climb' | 'hurt' | 'dead';
@@ -47,7 +50,7 @@ export const COMBO = [
 ];
 
 export interface GameEvent {
-  type: 'exit' | 'jump' | 'doublejump' | 'walljump' | 'land' | 'roll' | 'slash' | 'shoot' | 'swap' | 'ledge' | 'climb' | 'drop' | 'hit' | 'kill' | 'boltwall';
+  type: 'exit' | 'hurt' | 'death' | 'loot' | 'enemyshoot' | 'enemyswing' | 'jump' | 'doublejump' | 'walljump' | 'land' | 'roll' | 'slash' | 'shoot' | 'swap' | 'ledge' | 'climb' | 'drop' | 'hit' | 'kill' | 'boltwall';
   x: number;
   y: number;
   dir?: number;
@@ -112,6 +115,33 @@ export class Player {
   get feet() { return this.body.y + this.body.h; }
   get invulnerable() { return this.iframes > 0 || (this.state === 'roll' && this.rollT >= TUNE.rollIframes[0] && this.rollT <= TUNE.rollIframes[1]); }
 
+  /**
+   * Take a hit from an enemy. Rolls (i-frames) and the post-hit flicker ignore it; the overshield
+   * soaks damage first. Returns true if the hit landed.
+   */
+  damage(map: TileMap, dmg: number, dir: number, events: GameEvent[]): boolean {
+    if (this.state === 'dead' || this.invulnerable) return false;
+    const soaked = Math.min(this.shield, dmg);
+    this.shield -= soaked;
+    this.hp = Math.max(0, this.hp - (dmg - soaked));
+    this.attack.stage = 0;
+    this.iframes = 50;
+    // caught at the end of a roll: stand up first (if there is no room, the roll simply carries on)
+    const canStand = this.body.h === STAND_H || this.setHeight(map, STAND_H);
+    events.push({ type: 'hurt', x: this.cx, y: this.body.y + 20, dmg, dir });
+    if (this.hp <= 0) {
+      this.setState('dead');
+      this.vx = 0;
+      events.push({ type: 'death', x: this.cx, y: this.body.y + 20 });
+      return true;
+    }
+    if (!canStand) return true;
+    this.vx = dir * 3.2;
+    this.vy = -4;
+    this.setState('hurt');
+    return true;
+  }
+
   /** Current saber hitbox in world space, or null. */
   saberHitbox(): Rect | null {
     const a = this.attack;
@@ -174,7 +204,11 @@ export class Player {
     const dirIn = (held(BTN.RIGHT) ? 1 : 0) - (held(BTN.LEFT) ? 1 : 0);
     this.framesInState++;
 
-    if (this.state === 'dead') return;
+    if (this.state === 'dead') { // fall to the floor and stay there
+      this.vy = Math.min(TUNE.maxFall, this.vy + TUNE.gravity);
+      if (moveY(map, b, this.vy)) this.vy = 0;
+      return;
+    }
     if (this.iframes > 0) this.iframes--;
     if (this.rollCd > 0) this.rollCd--;
     if (this.ledgeCd > 0) this.ledgeCd--;
@@ -225,8 +259,21 @@ export class Player {
       return;
     }
 
+    // ---------------- drop through a one-way platform: Down while standing still on it
+    // (Down is also the roll key on the keyboard, so standing still on a platform means "drop", not "roll")
+    const onOneWay = this.state === 'ground' && map.oneWayBelow(b) && !map.solidAt({ ...b, y: b.y + 1 });
+    let dropped = false;
+    if (onOneWay && !dirIn && (pressed(BTN.DOWN) || (held(BTN.DOWN) && pressed(BTN.JUMP))) && !this.attack.stage) {
+      b.ignoreOneWay = true;
+      this.dropT = TUNE.dropFrames;
+      this.buffer = 0;
+      this.coyote = 0;
+      dropped = true;
+      events.push({ type: 'drop', x: this.cx, y: this.feet });
+    }
+
     // ---------------- roll
-    if (pressed(BTN.ROLL) && this.state !== 'roll' && this.rollCd === 0 && this.state !== 'hurt') {
+    if (!dropped && pressed(BTN.ROLL) && this.state !== 'roll' && this.rollCd === 0 && this.state !== 'hurt') {
       const a = this.attack;
       const cancellable = !a.stage || a.t >= this.combo(a.stage).windup + this.combo(a.stage).active;
       if (cancellable) {
@@ -269,9 +316,9 @@ export class Player {
     if (this.weapon === 'blaster' && held(BTN.ATTACK) && this.shootCd === 0 && this.state !== 'roll' && this.state !== 'hurt') {
       this.shootCd = TUNE.shootCooldown;
       this.shootT = 10;
-      const by = b.y + 21;
-      spawnBolt(this.facing > 0 ? b.x + b.w + 14 : b.x - 14, by, this.facing);
-      events.push({ type: 'shoot', x: this.cx + this.facing * 24, y: by, dir: this.facing });
+      const by = b.y + MUZZLE.dy; // the blaster's muzzle in the shooting frames (chest height)
+      spawnBolt(this.cx + this.facing * MUZZLE.dx, by, this.facing);
+      events.push({ type: 'shoot', x: this.cx + this.facing * MUZZLE.dx, y: by, dir: this.facing });
     }
     if (a.stage) {
       a.t++;
@@ -308,13 +355,8 @@ export class Player {
     else if (this.coyote > 0) this.coyote--;
 
     if (this.state !== 'roll' && this.state !== 'hurt') {
-      const wantsDrop = held(BTN.DOWN) && this.buffer > 0 && grounded && map.oneWayBelow(b) && !map.solidAt({ ...b, y: b.y + 1 });
-      if (wantsDrop) {
-        b.ignoreOneWay = true;
-        this.dropT = TUNE.dropFrames;
-        this.buffer = 0;
-        this.coyote = 0;
-        events.push({ type: 'drop', x: this.cx, y: this.feet });
+      if (dropped) {
+        // already falling through
       } else if (this.buffer > 0 && this.coyote > 0) {
         this.vy = TUNE.jumpVel;
         this.buffer = 0;
@@ -344,7 +386,7 @@ export class Player {
     if ((inp.released & BTN.JUMP) && this.vy < 0) this.vy *= TUNE.jumpCut;
 
     // ---------------- gravity
-    const apex = Math.abs(this.vy) < 1.5 && held(BTN.JUMP);
+    const apex = Math.abs(this.vy) < TUNE.apexBand && held(BTN.JUMP);
     let maxFall = held(BTN.DOWN) ? TUNE.fastFall : TUNE.maxFall;
     if (this.state === 'wall') maxFall = TUNE.wallSlideMax;
     this.vy = Math.min(maxFall, this.vy + (apex ? TUNE.apexGravity : TUNE.gravity));
@@ -426,7 +468,7 @@ export class Player {
   anim(): { name: string; t: number } {
     const a = this.attack;
     if (this.state === 'dead') return { name: 'death', t: this.framesInState };
-    if (this.state === 'hurt') return { name: 'hurt', t: 0 };
+    if (this.state === 'hurt') return { name: 'hurt', t: this.framesInState };
     if (this.state === 'roll') return { name: 'roll', t: this.rollT };
     if (this.state === 'ledge') return { name: 'ledgehang', t: 0 };
     if (this.state === 'climb') return { name: 'climb', t: this.climbT };

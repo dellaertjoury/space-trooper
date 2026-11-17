@@ -5,6 +5,8 @@ export interface LevelDef {
   map: TileMap;
   spawn: { x: number; y: number }; // pixel position of the player's hitbox top-left
   dummies: { x: number; y: number }[]; // feet position (pixels)
+  enemies: { kind: 'raider' | 'gunner'; x: number; y: number; range: number }[]; // feet position, patrol half-width
+  crates: { x: number; y: number; color: 'grey' | 'brown' | 'green' | 'blue' | 'maroon' }[]; // feet position
   signs: { x: number; y: number; text: string }[];
   lamps: { x: number; y: number; color: 'warm' | 'cool' | 'green' }[];
   exit?: { x: number; y: number; w: number; h: number }; // door back to the Cantina
@@ -13,7 +15,8 @@ export interface LevelDef {
 /**
  * Phase 1 test room: every move has a place to be practised.
  * Floor top is tile row 26. Read left to right:
- * start -> steps -> one-way platforms -> pit -> low tunnel (roll) -> wall-jump shaft -> ledge block -> training dummies.
+ * start -> steps -> one-way platforms -> pit -> roll gap under a hanging wall -> wall-jump shaft -> ledge block -> training dummies.
+ * Dune Raiders patrol along the way; supply crates break open for credits.
  */
 export function testRoom(): LevelDef {
   const W = 110, H = 30;
@@ -40,8 +43,8 @@ export function testRoom(): LevelDef {
   // pit
   m.fill(44, 26, 47, 27, Tile.Empty);
 
-  // low tunnel: one tile high, roll through it
-  m.fill(51, 18, 60, 24, S);
+  // roll gap: a wall hangs from the ceiling and stops one tile above the floor, only a roll fits under it
+  m.fill(54, 1, 56, 24, S);
 
   // wall-jump shaft: left pillar hangs from the ceiling (walk in underneath), right pillar is a wall
   m.fill(64, 5, 65, 22, S);
@@ -57,7 +60,17 @@ export function testRoom(): LevelDef {
     name: 'Training Deck',
     map: m,
     spawn: { x: 5 * T, y: 26 * T - 56 },
-    dummies: [tile(86, 26), tile(91, 26), tile(103, 26), tile(91, 15)],
+    dummies: [tile(86, 26), tile(91, 26)],
+    enemies: [
+      { kind: 'raider', ...tile(37, 26), range: 4 * T },
+      { kind: 'raider', ...tile(75, 26), range: 2 * T },
+      { kind: 'gunner', ...tile(92, 15), range: 3 * T },
+      { kind: 'gunner', ...tile(80, 21), range: 1 * T },
+    ],
+    crates: [
+      { ...tile(10, 26), color: 'brown' }, { ...tile(29, 13), color: 'green' }, { ...tile(49, 26), color: 'grey' },
+      { ...tile(61, 26), color: 'blue' }, { ...tile(95, 15), color: 'maroon' },
+    ],
     exit: { x: 105 * T, y: 23 * T, w: 2 * T, h: 3 * T },
     lamps: [
       { ...tile(3, 22), color: 'warm' }, { ...tile(13, 13), color: 'green' }, { ...tile(24, 22), color: 'cool' },
@@ -66,13 +79,13 @@ export function testRoom(): LevelDef {
       { ...tile(96, 17), color: 'cool' }, { ...tile(107, 22), color: 'warm' },
     ],
     signs: [
-      { ...tile(4, 26), text: 'MOVE  A/D  JUMP SPACE (x2)' },
-      { ...tile(27, 26), text: 'DOWN + JUMP: DROP' },
-      { ...tile(41, 26), text: 'ROLL  K / SHIFT' },
+      { ...tile(4, 26), text: 'MOVE ← →   JUMP ↑ (TWICE: FLIP)' },
+      { ...tile(26, 26), text: 'STAND STILL + ↓ : DROP' },
+      { ...tile(49, 26), text: 'ROLL ↓' },
       { ...tile(62, 26), text: 'WALL JUMP' },
       { ...tile(76, 26), text: 'GRAB LEDGES' },
-      { ...tile(84, 26), text: 'ATTACK J  SWAP Q' },
-      { ...tile(102, 22), text: 'UP: BACK TO CANTINA' },
+      { ...tile(82, 26), text: 'ATTACK SPACE   SWAP A' },
+      { ...tile(102, 22), text: 'SPACE: BACK TO CANTINA' },
     ],
   };
 }

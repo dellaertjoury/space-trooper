@@ -70,9 +70,11 @@ export async function openGame(browser, baseUrl, { test = true, seed = 1, hub = 
   const external = (u) => /fonts\.(googleapis|gstatic)\.com/.test(u); // web fonts: optional, fall back offline
   page.on('requestfailed', (r) => { if (!external(r.url())) failed.push(r.url()); });
   page.on('response', (r) => { if (r.status() >= 400 && !r.url().includes('agent-reports')) failed.push(`${r.status()} ${r.url()}`); });
+  // web fonts are optional (the game falls back offline); don't let a slow font server hold up the tests
+  await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   const mode = hub ? '' : test ? 'test=1&' : 'scene=run&';
-  await page.goto(`${baseUrl}?${mode}seed=${seed}`);
-  await page.waitForFunction(() => window.__ST?.ready, null, { timeout: 30000 });
+  await page.goto(`${baseUrl}?${mode}seed=${seed}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForFunction(() => window.__ST?.ready, null, { timeout: 90000 });
   return { page, consoleErrors, failed };
 }
 

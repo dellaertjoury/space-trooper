@@ -4,7 +4,9 @@
 import { BTN, expand, openGame, Report, rng, T } from './lib.mjs';
 
 const { LEFT: L, RIGHT: R, UP: U, DOWN: D, JUMP: J, ATTACK: A, ROLL: RO, SWAP: S } = BTN;
-const ALPHABET = [R, L, R | J, L | J, J, R | RO, L | RO, U | J, D | J, 0, R | U, L | U];
+const ALPHABET = [R, L, R | J, L | J, J, R | RO, L | RO, U | J, D, 0, R | U, L | U];
+// movement puzzles are about the level, so the route searches run without enemies
+const CALM = { enemies: false };
 const DUR = [1, 2, 4, 8, 12, 16, 24, 32];
 
 /** Evolutionary search for an input sequence that brings the player into a goal rectangle (tiles). */
@@ -21,7 +23,7 @@ export async function search(page, { start, goal, prefix = [], gens = 70, pop = 
   };
   let best = { d: Infinity };
   for (let g = 0; g < gens; g++) {
-    const jobs = popn.map((m) => ({ seed: 1, masks: [...prefix, ...expand(m)], start }));
+    const jobs = popn.map((m) => ({ seed: 1, masks: [...prefix, ...expand(m)], start, opts: CALM }));
     const res = await page.evaluate((j) => __ST.simulateMany(j).map((x) => ({ trace: x.trace, violations: x.violations })), jobs);
     const scored = popn.map((m, i) => {
       let d = Infinity, hitF = -1;
@@ -64,7 +66,7 @@ export async function runHardcore(browser, url, { seed = 11, fuzzPerStart = 24 }
   const { page, consoleErrors } = await openGame(browser, url, { test: true });
   const build = await page.evaluate(() => __ST.build);
   const rep = new Report('hardcore', build);
-  const sim = (masks, start) => page.evaluate(([m, s]) => __ST.simulate(1, m, s), [masks, start]);
+  const sim = (masks, start, opts = CALM) => page.evaluate(([m, s, o]) => __ST.simulate(1, m, s, o), [masks, start, opts]);
   const showAndShoot = async (masks, start, uptoFrame) => {
     await page.evaluate(([m, s, n]) => { __ST.reset(1); if (s) __ST.teleport(s.tx, s.ty); __ST.run(m.slice(0, n)); }, [masks, start, uptoFrame ?? masks.length]);
   };
@@ -92,7 +94,7 @@ export async function runHardcore(browser, url, { seed = 11, fuzzPerStart = 24 }
   // ---------------------------------------------------------------- 2. route challenges
   const routes = [
     { name: 'Climb the wall-jump shaft onto the right pillar', start: { tx: 61, ty: 26 }, goal: { x0: 70, x1: 71, y0: 10, y1: 10 } },
-    { name: 'Get through the low tunnel', start: { tx: 49, ty: 26 }, goal: { x0: 62, x1: 63, y0: 25, y1: 25 } },
+    { name: 'Roll under the hanging wall', start: { tx: 50, ty: 26 }, goal: { x0: 58, x1: 60, y0: 25, y1: 25 } },
     { name: 'Reach the high platform from the ledge block', start: { tx: 79, ty: 21 }, goal: { x0: 86, x1: 96, y0: 14, y1: 14 } },
     { name: 'Get over the low wall to the last droid', start: { tx: 92, ty: 26 }, via: [{ x0: 97, x1: 99, y0: 18, y1: 18 }], goal: { x0: 101, x1: 107, y0: 25, y1: 25 } },
     { name: 'Climb out of the pit', start: { tx: 45, ty: 28 }, goal: { x0: 48, x1: 50, y0: 25, y1: 25 } },
@@ -145,7 +147,7 @@ export async function runHardcore(browser, url, { seed = 11, fuzzPerStart = 24 }
   const level = await page.evaluate(() => __ST.level());
   const starts = interestingStarts(level);
   const r = rng(seed + 5);
-  const AGGRO = [R | RO, L | RO, R | J, L | J, J, D | J, U | J, R, L, D, R | A, L | A, 0, R | J | RO, L | J | RO];
+  const AGGRO = [R | RO, L | RO, R | J, L | J, J, D | J, U | J, R, L, D, D | RO, R | A, L | A, 0, R | J | RO, L | J | RO];
   let sims = 0;
   for (const st of starts) {
     const jobs = [];
@@ -181,6 +183,34 @@ export async function runHardcore(browser, url, { seed = 11, fuzzPerStart = 24 }
   const invPct = Math.round((spam.invulnFrames / spam.state.frame) * 100);
   rep.metric('rollSpamInvulnerablePct', invPct);
   if (invPct > 60) await rep.issue(page, { key: 'bal:iframes', severity: 'minor', title: `Roll spam keeps you invulnerable ${invPct}% of the time`, category: 'balance', screenshot: false });
+
+  // ---------------------------------------------------------------- 5. enemies: fair and beatable
+  // a simple, honest fighter: walk up, slash, and roll away from a telegraphed wind-up
+  const duel = {};
+  for (const [name, idx, start] of [['raider', 0, { tx: 30, ty: 26 }], ['gunner', 2, { tx: 88, ty: 15 }]]) {
+    duel[name] = await page.evaluate(([idx, start]) => {
+      __ST.reset(1); __ST.teleport(start.tx, start.ty);
+      let hits = 0, rolls = 0;
+      for (let t = 0; t < 1800; t++) {
+        const s = __ST.state(), p = s.player, e = s.enemies[idx];
+        if (!e || e.state === 'dead' || p.state === 'dead') break;
+        const dx = e.x + 11 - (p.x + 10), dir = dx > 0 ? 2 : 1;
+        let m = 0;
+        if (e.state === 'windup' && Math.abs(dx) < 70) { m = dir | 64; rolls++; }  // dodge through it
+        else if (Math.abs(dx) > 34) m = dir;
+        else if (t % 7 === 0) { m = 32; hits++; }
+        __ST.step(1, m);
+      }
+      const s = __ST.state();
+      return { enemyDown: s.enemies[idx].state === 'dead', hpLeft: s.player.hp, playerState: s.player.state, swings: hits, dodges: rolls, seconds: +(s.frame / 60).toFixed(1) };
+    }, [idx, start]);
+  }
+  rep.metric('duels', duel);
+  rep.check('a raider can be cut down with the saber', duel.raider.enemyDown, JSON.stringify(duel.raider));
+  rep.check('a gunner can be cut down with the saber', duel.gunner.enemyDown, JSON.stringify(duel.gunner));
+  for (const [k, d] of Object.entries(duel)) {
+    if (d.enemyDown && d.hpLeft < 30) await rep.issue(page, { key: 'bal:duel:' + k, severity: 'minor', title: `Balance: face-tanking one ${k} costs ${100 - d.hpLeft} of 100 HP`, note: 'Holding attack without dodging should cost something, but one basic enemy taking most of your health feels unfair this early.', category: 'balance', screenshot: false });
+  }
 
   for (const e of consoleErrors) await rep.issue(page, { key: 'console:' + e.slice(0, 80), severity: 'blocker', title: `Console error: ${e.slice(0, 90)}`, category: 'crash', screenshot: false });
   await page.close();
