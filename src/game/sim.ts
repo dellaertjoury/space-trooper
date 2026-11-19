@@ -68,6 +68,15 @@ export class Sim {
       this.events.push({ type: 'exit', x: ex.x, y: ex.y });
       inp = { held: inp.held & ~BTN.ATTACK, pressed: inp.pressed & ~BTN.ATTACK, released: inp.released };
     }
+    // Space next to a closed crate opens it (no need to hit it)
+    if ((inp.pressed & BTN.ATTACK) && p.state === 'ground') {
+      const reach = { x: p.body.x - 10, y: p.body.y, w: p.body.w + 20, h: p.body.h };
+      const crate = this.crates.find((c) => !c.open && overlaps(reach, c));
+      if (crate) {
+        this.openCrate(crate);
+        inp = { held: inp.held & ~BTN.ATTACK, pressed: inp.pressed & ~BTN.ATTACK, released: inp.released };
+      }
+    }
     p.update(this.map, inp, this.events, (x, y, dir) => {
       this.bolts.push({ id: ++this.boltId, x, y, vx: dir * TUNE.boltSpeed, vy: 0, life: 70, dead: false, dmg: Math.round(7 * this.loadout.blasterDmg) });
       this.stats.shots++;

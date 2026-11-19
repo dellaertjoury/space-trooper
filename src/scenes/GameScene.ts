@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { InputSystem, padCombo, rle, unrle } from '../core/input';
 import { Sim, SimOptions, simulate } from '../game/sim';
 import { GameEvent } from '../game/player';
-import { drawBackdrop, drawBlade, drawBolt, drawDummy, drawGlow, drawLamp, drawLevel, drawSlash, drawSpark } from '../art/procedural';
+import { drawBackdrop, drawBlade, drawBolt, drawDummy, drawGlow, drawLamp, drawLevel, drawSlash, drawSpark, CRATE_COLORS, drawCrateSide } from '../art/procedural';
 import { Issue, IssueTracker } from '../debug/issues';
 import { DEFAULT_LOADOUT, Loadout, loadoutFrom, loadProfile, Profile, SABER_COLORS, saveProfile } from '../game/profile';
 import { EnemyView, preloadChar, preloadTrooper, TrooperView } from './trooperView';
@@ -57,8 +57,6 @@ export class GameScene extends Phaser.Scene {
     preloadTrooper(this);
     preloadChar(this, 'raider');
     preloadChar(this, 'gunner');
-    for (const c of ['grey', 'brown', 'green', 'blue', 'maroon']) for (const k of [`crate_${c}`, `crate_${c}_open`])
-      if (!this.textures.exists('h2_' + k)) this.load.image('h2_' + k, `assets/hub2/${k}.png`);
     if (!this.textures.exists('droid_turret')) this.load.image('droid_turret', 'assets/cantina/droid_turret.png');
     for (const k of ['icon_health', 'icon_credit', 'icon_crystal_blue', 'icon_crystal_purple', 'icon_droidpart', 'icon_ingot', 'saber', 'blaster_heavy'])
       this.load.image('ui_' + k, `assets/ui/${k}.png`);
@@ -87,6 +85,7 @@ export class GameScene extends Phaser.Scene {
     tex('bolt', drawBolt());
     tex('boltGreen', drawBolt('#3fdc6a'));
     tex('boltBlue', drawBolt('#3f9cff'));
+    for (const col of Object.keys(CRATE_COLORS)) { tex(`crate_${col}`, drawCrateSide(col, false)); tex(`crate_${col}_open`, drawCrateSide(col, true)); }
     tex('slash', drawSlash());
     tex('slash3', drawSlash(42, 9));
     tex('dummy', drawDummy());
@@ -252,8 +251,7 @@ export class GameScene extends Phaser.Scene {
     for (const v of this.enemyViews) v.destroy();
     for (const c of this.crateViews) c.destroy();
     this.enemyViews = this.sim.enemies.map((e) => new EnemyView(this, e));
-    this.crateViews = this.sim.crates.map((c) => this.add.image(c.x + c.w / 2, c.y + c.h, 'h2_crate_' + c.color).setOrigin(0.5, 1).setDepth(1.5));
-    for (const im of this.crateViews) im.setScale(26 / im.height);
+    this.crateViews = this.sim.crates.map((c) => this.add.image(c.x + c.w / 2, c.y + c.h + 1, 'crate_' + c.color).setOrigin(0.5, 1).setDepth(1.5).setScale(0.5));
   }
 
   // ------------------------------------------------------------ rendering
@@ -290,8 +288,8 @@ export class GameScene extends Phaser.Scene {
     sim.crates.forEach((c, i) => {
       const im = this.crateViews[i];
       if (!im) return;
-      const key = 'h2_crate_' + c.color + (c.open ? '_open' : '');
-      if (im.texture.key !== key) { im.setTexture(key); im.setScale(26 / im.height); }
+      const key = 'crate_' + c.color + (c.open ? '_open' : '');
+      if (im.texture.key !== key) im.setTexture(key);
       if (c.flash > 0) im.setTintFill(0xffffff); else im.clearTint();
     });
 
@@ -537,7 +535,7 @@ function exposeTestApi(scene: GameScene) {
     objects: () => scene.children.length,
     tweens: () => scene.tweens.getTweens().length,
     paused: () => scene.isPaused(),
-    textures: () => ['trooper', 'trooper_glow', 'trooper_halo', 'trooper_core', 'raider', 'gunner', 'h2_crate_brown', 'level', 'bolt', 'boltGreen', 'dummy', 'ui_icon_health', 'ui_saber', 'ui_blaster_heavy'].map((k) => [k, scene.textures.exists(k) && scene.textures.get(k).key !== '__MISSING']),
+    textures: () => ['trooper', 'trooper_glow', 'trooper_halo', 'trooper_core', 'raider', 'gunner', 'crate_brown', 'level', 'bolt', 'boltGreen', 'dummy', 'ui_icon_health', 'ui_saber', 'ui_blaster_heavy'].map((k) => [k, scene.textures.exists(k) && scene.textures.get(k).key !== '__MISSING']),
     addIssue: (i: Partial<Issue> & { title: string }) => scene.tracker.add(i),
     screenshot: () => scene.screenshot(),
   };

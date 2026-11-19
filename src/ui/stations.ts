@@ -42,7 +42,31 @@ export function openStation(id: StationId, h: StationHost) {
   current = id;
   if (!root) { root = document.createElement('div'); root.id = 'st-station'; document.body.appendChild(root); }
   render();
-  setTimeout(() => root?.querySelector<HTMLButtonElement>('button:not([disabled]).primary, button:not([disabled])')?.focus(), 30);
+  focusFirst();
+}
+
+/** Focus the panel's main action (never the close button): the primary button, else the first usable one. */
+function focusFirst() {
+  const body = root?.querySelector('.body');
+  const b = body?.querySelector<HTMLButtonElement>('button.primary:not([disabled])') ?? body?.querySelector<HTMLButtonElement>('button:not([disabled])');
+  b?.focus({ preventScroll: false });
+}
+
+/**
+ * Keyboard inside a panel: arrows move, Space / Enter use the focused button (on key down, once),
+ * Esc closes. The browser's own Space-on-key-up click is blocked, so the Space press that opened
+ * the panel can never also press a button in it.
+ */
+function onKey(e: KeyboardEvent) {
+  if (!current) return;
+  if (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') {
+    e.preventDefault(); // also cancels the browser's own click on key up
+    if (e.type === 'keydown' && !e.repeat) navigate('click');
+  }
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('keydown', onKey, true);
+  document.addEventListener('keyup', onKey, true);
 }
 
 export function closeStation() {
@@ -59,9 +83,11 @@ export function navigate(dir: 'next' | 'prev' | 'click' | 'close') {
   const btns = [...root.querySelectorAll<HTMLButtonElement>('button:not([disabled])')];
   if (!btns.length) return;
   const i = btns.indexOf(document.activeElement as HTMLButtonElement);
-  if (dir === 'click') { (i >= 0 ? btns[i] : btns[0]).click(); return; }
-  const n = i < 0 ? 0 : (i + (dir === 'next' ? 1 : -1) + btns.length) % btns.length;
-  btns[n].focus();
+  const items = btns.filter((b) => !b.classList.contains('x')); // the ✕ stays reachable by mouse and Esc
+  if (dir === 'click') { (i >= 0 ? btns[i] : items[0] ?? btns[0]).click(); return; }
+  const j = items.indexOf(document.activeElement as HTMLButtonElement);
+  const n = j < 0 ? 0 : (j + (dir === 'next' ? 1 : -1) + items.length) % items.length;
+  items[n]?.focus();
 }
 
 // ------------------------------------------------------------------ rendering
@@ -76,6 +102,8 @@ function costHtml(p: Profile, c: Partial<Resources>) {
 
 function render() {
   if (!root || !current || !host) return;
+  const was = document.activeElement as HTMLElement | null;
+  const keep = was && root.contains(was) && was.dataset.act ? { act: was.dataset.act, arg: was.dataset.arg ?? '' } : null;
   const p = host.profile;
   const [title, sub] = TITLES[current];
   const res = (Object.keys(p.res) as (keyof Resources)[]).map((k) => chip(k, p.res[k])).join('');
@@ -88,9 +116,12 @@ function render() {
         <button class="x" data-act="close" aria-label="Close">✕</button>
       </header>
       <div class="body">${BODY[current](p)}</div>
-      <footer>Esc / B close · arrows or d-pad move · Enter / A select</footer>
+      <footer>Space / Enter / A use · arrows or d-pad move · Esc / B close</footer>
     </div>`;
   root.querySelectorAll<HTMLButtonElement>('[data-act]').forEach((b) => b.onclick = () => act(b.dataset.act!, b.dataset.arg ?? ''));
+  // after buying / upgrading the panel is redrawn: keep the cursor on the same button
+  const again = keep && root.querySelector<HTMLButtonElement>(`.body button[data-act="${keep.act}"][data-arg="${keep.arg}"]:not([disabled])`);
+  if (again) again.focus(); else if (keep) focusFirst();
 }
 
 function flash(msg: string, ok = true) {
@@ -161,7 +192,7 @@ const BODY: Record<StationId, (p: Profile) => string> = {
         <div class="buy">${costHtml(p, it.cost)}<button data-act="buy" data-arg="${it.id}" ${canAfford(p, it.cost) ? '' : 'disabled'}>Buy</button></div>
       </div>`).join('')}
     </div>
-    <img class="npc" src="assets/hub/droid_tall_side.png" alt="">`,
+    <div class="npc droid" aria-hidden="true"></div>`,
 
   armoury: (p) => {
     const lo = loadoutFrom(p);
@@ -291,6 +322,7 @@ function injectStyles() {
   #st-station .stats{background:#191219;border:2px solid #3e2e2a;border-radius:10px;padding:12px 14px;position:relative;overflow:hidden}
   #st-station dl{display:grid;grid-template-columns:auto auto;gap:6px 12px;margin:8px 0 0}#st-station dt{color:#c7b8a4}#st-station dd{margin:0;text-align:right;font:600 16px Oswald,sans-serif}
   #st-station .hero{position:absolute;right:-20px;bottom:-26px;height:120px;opacity:.18}
+  #st-station .npc.droid{width:91px;height:150px;background:url(assets/bar_droid.png) 0 0/730px auto no-repeat}
   #st-station .npc{position:absolute;right:12px;bottom:6px;height:150px;pointer-events:none;opacity:.95;filter:drop-shadow(0 6px 10px rgba(0,0,0,.6))}
   #st-station .grid:has(+ .npc){padding-right:110px}
   #st-station .preview{background:radial-gradient(ellipse at center,color-mix(in srgb,var(--glow) 22%,transparent),transparent 70%),#140e1e;border:2px solid #3e2e2a;border-radius:10px;padding:16px;text-align:center}

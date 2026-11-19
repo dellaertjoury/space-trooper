@@ -49,19 +49,23 @@ export const HUB_STATIONS: HubStation[] = [
   { id: 'workshop', label: 'Droid Workshop', x0: 43 * T, x1: 53 * T, floor: P, signY: P - 150 },
 ];
 
-/** where the bar droid walks (ground floor, in front of the bar) */
-export const BAR_DROID = { x0: 3.5 * T, x1: 21 * T, y: G };
+/**
+ * The animated droids (the bar droid sheet). Each one ambles around its stand, waves when the
+ * Trooper comes over and bounces now and then. The first one wanders the whole bar.
+ */
+export const HUB_DROIDS = [
+  { x0: 3.5 * T, x1: 21 * T, y: G, start: 4 * T },             // the bar
+  { x0: 10.5 * T, x1: 12.5 * T, y: P, start: 11 * T },        // next to the Scrapper Stall
+  { x0: 50 * T, x1: 52.5 * T, y: P, start: 51 * T },          // next to the Droid Workshop bench
+  { x0: 38 * T, x1: 41 * T, y: G, start: 39 * T },             // Mission Control
+];
 
 const UNDER_SLAB = P + SLAB; // underside of the upper floor, where the ground floor's lamps hang
 const CEIL = 2 * T;
 
 export const HUB_PROPS: Prop[] = [
   // ================= ground floor: the bar (left)
-  { key: 'droid_tall', x: 250, y: G - 10, h: 66 },                       // bartender, behind the counter
   { key: 'barCounter', x: 300, y: G, h: 48 },                            // the Trooper walks in front of it
-  { key: 'h2_crate_brown', x: 470, y: G, h: 28 },
-  { key: 'h2_crate_brown_open', x: 504, y: G, h: 30 },
-  { key: 'h2_crate_maroon', x: 484, y: G - 28, h: 24 },
   { key: 'h2_canister', x: 82, y: G, h: 34, glow: 0x46c8ff },
   { key: 'h2_lamp_dome', x: 160, y: UNDER_SLAB, h: 18, hang: true, glow: 0xffb070 },
   { key: 'h2_lamp_dome', x: 300, y: UNDER_SLAB, h: 18, hang: true, glow: 0xffb070 },
@@ -79,12 +83,7 @@ export const HUB_PROPS: Prop[] = [
   { key: 'h2_lamp_bar', x: 880, y: UNDER_SLAB, h: 12, hang: true, glow: 0xffe0a0 },
   { key: 'h2_lamp_bar', x: 1130, y: UNDER_SLAB, h: 12, hang: true, glow: 0xffe0a0 },
   // ================= upper floor: Scrapper Stall
-  { key: 'droid_tall_side', x: 200, y: P - 6, h: 60 },                   // the scrapper (a droid, not a raider)
   { key: 'h2_bench_hazard', x: 200, y: P, h: 30 },                       // the stall counter
-  { key: 'h2_crate_green_open', x: 96, y: P, h: 30 },
-  { key: 'h2_crate_blue_open', x: 300, y: P, h: 30 },
-  { key: 'h2_crate_grey', x: 132, y: P, h: 26 },
-  { key: 'h2_case_small', x: 300, y: P - 30, h: 16 },
   { key: 'h2_lamp_tube_v', x: 70, y: P - 70, h: 30, glow: 0xffe0a0 },
   // ================= upper floor: Saber Forge
   { key: 'bench_press', x: 430, y: P, h: 54 },
@@ -98,11 +97,8 @@ export const HUB_PROPS: Prop[] = [
   { key: 'gear_shoulder', x: 890, y: P - 54, h: 18 },
   { key: 'gear_gauntlet', x: 835, y: P - 12, h: 22 },
   { key: 'gear_boots', x: 890, y: P - 12, h: 20 },
-  { key: 'h2_locker', x: 960, y: P, h: 46 },
-  { key: 'h2_case_green', x: 790, y: P, h: 26 },
   // ================= upper floor: Droid Workshop
   { key: 'bench_tools', x: 1130, y: P, h: 54 },
-  { key: 'droid_olive', x: 1240, y: P, h: 60 },
   { key: 'droid_turret', x: 1060, y: P - 72, h: 26, bob: true },
   { key: 'h2_wallbox_wires', x: 1050, y: P - 40, h: 40 },
   { key: 'h2_wallbox_meter', x: 1270, y: P - 80, h: 34 },

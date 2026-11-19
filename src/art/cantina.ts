@@ -250,7 +250,7 @@ export function drawHangingLamp(): HTMLCanvasElement {
 // Two-floor hub (tile scale). Floors are bands of wall, joined by a stairwell in the centre.
 // =====================================================================================================
 
-/** Wall art behind the two floors: warm panels, pipes, the stairwell door on both floors, bar shelves, porthole. */
+/** Wall art behind the two floors: warm panels, pipes, the stairwell door on both floors, bar shelves. */
 export function drawHubBackdrop(w: number, h: number, floors: number[], wallL = 48, wallR = w - 48, slab = 72, stairX = w / 2): HTMLCanvasElement {
   const [cv, c] = mk(w, h);
   const rng = new Rng(7);
@@ -292,20 +292,6 @@ export function drawHubBackdrop(w: number, h: number, floors: number[], wallL = 
     c.lineWidth = 4; c.strokeStyle = INK;
     const label = up ? 'UPSTAIRS  \u25B2' : 'DOWNSTAIRS  \u25BC';
     c.strokeText(label, stairX, dy - 14); c.fillStyle = '#ffd58a'; c.fillText(label, stairX, dy - 14);
-  }
-
-  // porthole on the ground floor, between the bar and Mission Control
-  for (const [px, py] of [[600, G - 160]] as [number, number][]) {
-    const r = 30;
-    c.save(); c.beginPath(); c.arc(px, py, r, 0, Math.PI * 2); c.clip();
-    const sky = c.createLinearGradient(0, py - r, 0, py + r);
-    sky.addColorStop(0, '#2b1640'); sky.addColorStop(0.55, '#b5506a'); sky.addColorStop(0.8, '#f29a5e'); sky.addColorStop(1, '#ffd28a');
-    c.fillStyle = sky; c.fillRect(px - r, py - r, r * 2, r * 2);
-    c.fillStyle = '#ffe6b0'; c.beginPath(); c.arc(px - 8, py + 4, 7, 0, 7); c.fill();
-    c.fillStyle = '#5a2a40'; c.beginPath(); c.moveTo(px - r, py + 20); c.lineTo(px - 10, py + 12); c.lineTo(px + 14, py + 18); c.lineTo(px + r, py + 14); c.lineTo(px + r, py + r); c.lineTo(px - r, py + r); c.fill();
-    c.restore();
-    c.lineWidth = 6; c.strokeStyle = '#5b5f73'; c.beginPath(); c.arc(px, py, r + 3, 0, 7); c.stroke();
-    c.lineWidth = 2.5; c.strokeStyle = INK; c.beginPath(); c.arc(px, py, r + 6, 0, 7); c.stroke(); c.beginPath(); c.arc(px, py, r, 0, 7); c.stroke();
   }
 
   // the bar's back wall: bottle shelves + neon sign (ground floor, left)

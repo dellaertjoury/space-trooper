@@ -10,7 +10,7 @@ import { TileMap, T } from '../core/tilemap';
 import { Player } from '../game/player';
 import { loadoutFrom, loadProfile, Profile, RES_ICON, Resources, saveProfile } from '../game/profile';
 import { drawArmouryRack, drawBarCounter, drawHoloCone, drawHoloTable, drawHubBackdrop, drawHubTiles, StationId } from '../art/cantina';
-import { BAR_DROID, FLOOR, HUB_H, HUB_PROPS, HUB_SPAWN, HUB_STATIONS, HUB_W, hubMap, SLAB, STAIRS } from '../game/hubLevel';
+import { HUB_DROIDS, FLOOR, HUB_H, HUB_PROPS, HUB_SPAWN, HUB_STATIONS, HUB_W, hubMap, SLAB, STAIRS } from '../game/hubLevel';
 import { drawGlow } from '../art/procedural';
 import { closeStation, isStationOpen, navigate, openStation } from '../ui/stations';
 import { preloadTrooper, TrooperView } from './trooperView';
@@ -245,7 +245,7 @@ export class CantinaScene extends Phaser.Scene {
   private stairPrompt!: Phaser.GameObjects.Text;
   private transit = false;
   private forgeHolos: Phaser.GameObjects.Image[] = [];
-  private droid: { s: Phaser.GameObjects.Sprite; x: number; dir: number; mode: 'walk' | 'idle' | 'wave' | 'bounce'; t: number; waved: boolean } | null = null;
+  private droids: { s: Phaser.GameObjects.Sprite; x: number; dir: number; mode: 'walk' | 'idle' | 'wave' | 'bounce'; t: number; waved: boolean; area: typeof HUB_DROIDS[number] }[] = [];
 
   floorOf(): 'ground' | 'top' | null {
     const f = this.player.feet;
@@ -286,21 +286,28 @@ export class CantinaScene extends Phaser.Scene {
   }
 
   private buildBarDroid() {
-    if (!this.textures.exists('bar_droid')) { this.droid = null; return; }
+    this.droids = [];
+    if (!this.textures.exists('bar_droid')) return;
     const meta = this.cache.json.get('barDroidMeta');
-    const s = this.add.sprite(BAR_DROID.x0 + 60, BAR_DROID.y, 'bar_droid', 0).setOrigin(0.5, meta.feetY / meta.frameHeight).setScale(0.44).setDepth(2.5);
-    this.droid = { s, x: BAR_DROID.x0 + 60, dir: 1, mode: 'walk', t: 0, waved: false };
+    HUB_DROIDS.forEach((area, i) => {
+      const s = this.add.sprite(area.start, area.y, 'bar_droid', 0).setOrigin(0.5, meta.feetY / meta.frameHeight).setScale(0.44).setDepth(2.5);
+      // stagger them so they don't all move in step
+      this.droids.push({ s, x: area.start, dir: i % 2 ? -1 : 1, mode: i ? 'idle' : 'walk', t: i * 97, waved: false, area });
+    });
   }
 
   /** The bar droid wanders in front of the bar, waves when the Trooper comes over, bounces now and then. */
   private updateDroid() {
-    const d = this.droid;
-    if (!d) return;
-    const meta = this.cache.json.get('barDroidMeta');
-    const A = meta.anims as Record<string, number[]>;
+    if (!this.droids.length) return;
+    const A = this.cache.json.get('barDroidMeta').anims as Record<string, number[]>;
+    for (const d of this.droids) this.updateOneDroid(d, A);
+  }
+
+  private updateOneDroid(d: CantinaScene['droids'][number], A: Record<string, number[]>) {
+    const BAR_DROID = d.area;
     d.t++;
     const p = this.player;
-    const near = this.floorOf() === 'ground' && Math.abs(p.cx - d.x) < 70;
+    const near = Math.abs(p.feet - d.area.y) < 4 && Math.abs(p.cx - d.x) < 70;
     if (!near) d.waved = false;
     if (near && !d.waved && d.mode !== 'wave') { d.mode = 'wave'; d.t = 0; d.waved = true; }
     switch (d.mode) {

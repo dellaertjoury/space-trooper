@@ -194,3 +194,31 @@ export function drawLamp(color: string): HTMLCanvasElement {
   px(c, 2, 0, 6, 2, PAL.ink); px(c, 1, 2, 8, 8, PAL.ink); px(c, 2, 3, 6, 6, color); px(c, 3, 4, 3, 3, '#ffffff'); px(c, 3, 10, 4, 2, PAL.ink);
   return cv;
 }
+
+/** Supply crate seen straight from the side (flat 2D, no top face). Opened: lid tipped back, light inside. */
+export const CRATE_COLORS: Record<string, [string, string, string]> = {
+  grey: ['#6c7486', '#8a93a6', '#4a5162'], brown: ['#8a5a36', '#a87348', '#5e3d25'], green: ['#5f6e3e', '#7a8a50', '#414c2a'],
+  blue: ['#3e5878', '#55739a', '#2a3d55'], maroon: ['#6e3240', '#8a4252', '#4a212b'],
+};
+export function drawCrateSide(color: string, open: boolean): HTMLCanvasElement {
+  const [base, hi, dark] = CRATE_COLORS[color] ?? CRATE_COLORS.grey;
+  const W = 30, H = 30, top = 8; // body sits in the lower 22 px; room above for the lid
+  const [cv, c] = mk(W, H);
+  const ink = PAL.ink;
+  const box = (x: number, y: number, w: number, h: number, fill: string) => { c.fillStyle = ink; c.fillRect(x - 1, y - 1, w + 2, h + 2); c.fillStyle = fill; c.fillRect(x, y, w, h); };
+  if (open) {
+    // lid tipped up behind the box
+    c.save(); c.translate(3, top + 1); c.rotate(-1.05);
+    box(0, -3, 24, 3, hi); c.restore();
+    c.fillStyle = 'rgba(255,214,140,0.85)'; c.fillRect(4, top - 1, W - 8, 2);
+  } else {
+    box(2, top - 3, W - 4, 4, hi); // lid
+  }
+  box(2, top + 1, W - 4, H - top - 2, base);            // body
+  c.fillStyle = dark; c.fillRect(2, top + 1, W - 4, 2);  // shadow under the lid
+  c.fillStyle = hi; c.fillRect(2, top + 5, W - 4, 1); c.fillRect(2, H - 6, W - 4, 1);
+  for (const x of [2, W - 6]) { c.fillStyle = dark; c.fillRect(x, top + 1, 4, H - top - 2); c.fillStyle = '#c9ced8'; c.fillRect(x + 1, top + 3, 2, 2); c.fillRect(x + 1, H - 5, 2, 2); }
+  c.fillStyle = ink; c.fillRect(W / 2 - 4, top + 8, 8, 6);
+  c.fillStyle = open ? '#3a3f4c' : '#ffd36a'; c.fillRect(W / 2 - 3, top + 9, 6, 4); // latch light
+  return cv;
+}
