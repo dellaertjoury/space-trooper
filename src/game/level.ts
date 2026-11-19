@@ -59,7 +59,7 @@ export function testRoom(): LevelDef {
   return {
     name: 'Training Deck',
     map: m,
-    spawn: { x: 5 * T, y: 26 * T - 56 },
+    spawn: { x: 5 * T, y: 26 * T - 64 },
     dummies: [tile(86, 26), tile(91, 26)],
     enemies: [
       { kind: 'raider', ...tile(37, 26), range: 4 * T },

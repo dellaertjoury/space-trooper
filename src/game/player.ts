@@ -45,9 +45,12 @@ export const TUNE = {
   boltSpeed: 12,
 };
 
-const STAND_H = 56, ROLL_H = 22, W = 20;
+/** Characters are drawn 15% larger than the source sheet; hitboxes match the drawn size. */
+export const CHAR_SCALE = 1.15;
+export const STAND_H = 64, ROLL_H = 22;
+const W = 22;
 /** muzzle of the blaster relative to the hitbox centre / top, measured on the shooting frames */
-export const MUZZLE = { dx: 30, dy: 11 };
+export const MUZZLE = { dx: 35, dy: 13 };
 
 export type Weapon = 'blaster' | 'saber';
 export type PState = 'ground' | 'air' | 'roll' | 'wall' | 'ledge' | 'climb' | 'hurt' | 'dead';

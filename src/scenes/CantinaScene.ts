@@ -295,7 +295,7 @@ export class CantinaScene extends Phaser.Scene {
     if (!this.textures.exists('bar_droid')) return;
     const meta = this.cache.json.get('barDroidMeta');
     HUB_DROIDS.forEach((area, i) => {
-      const s = this.add.sprite(area.start, area.y, 'bar_droid', 0).setOrigin(0.5, meta.feetY / meta.frameHeight).setScale(0.44).setDepth(2.5);
+      const s = this.add.sprite(area.start, area.y, 'bar_droid', 0).setOrigin(0.5, meta.feetY / meta.frameHeight).setScale(0.5).setDepth(2.5);
       // stagger them so they don't all move in step
       this.droids.push({ s, x: area.start, dir: i % 2 ? -1 : 1, mode: i ? 'idle' : 'walk', t: i * 97, waved: false, area });
     });

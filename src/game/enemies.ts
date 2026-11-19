@@ -13,9 +13,9 @@ export const ENEMY = {
   gunner: { hp: 45, walk: 0.8, run: 1.6, sight: 300, reach: 0, windup: 36, strike: 12, recover: 34, dmg: 10, cooldown: 50, credits: 20, keepAway: 120, boltSpeed: 6.5 },
 };
 /** the brute's staff while it swings, relative to the front of its body */
-const SWING = { dx: -4, dy: 4, w: 46, h: 44 };
+const SWING = { dx: -4, dy: 4, w: 52, h: 50 };
 /** the gunner's muzzle relative to body centre / top (measured on the shooting frames) */
-export const GUNNER_MUZZLE = { dx: 40, dy: 15 };
+export const GUNNER_MUZZLE = { dx: 46, dy: 17 };
 
 export interface Enemy {
   id: number;
@@ -39,7 +39,7 @@ export interface Enemy {
 }
 
 export function makeEnemy(id: number, kind: EnemyKind, feetX: number, feetY: number, range = 4 * T): Enemy {
-  const w = 22, h = 54;
+  const w = 24, h = 62; // drawn 15% larger than the sheet, like the Trooper
   return {
     id, kind, body: { x: Math.round(feetX - w / 2), y: feetY - h, w, h, rx: 0, ry: 0, ignoreOneWay: false },
     vx: 0, vy: 0, facing: -1, hp: ENEMY[kind].hp, maxHp: ENEMY[kind].hp, state: 'patrol', t: 0, cd: 0,

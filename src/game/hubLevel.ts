@@ -1,5 +1,5 @@
 /**
- * The Cantina: two floors at run scale (24 px tiles, Trooper 56 px), joined by a stairwell in the centre.
+ * The Cantina: two floors at run scale (24 px tiles, Trooper 64 px), joined by a stairwell in the centre.
  *   Ground floor : the bar (left) and Mission Control (right)
  *   Upper floor  : everything upgrade-related: Scrapper Stall, Saber Forge | Armoury, Droid Workshop
  * Stand in the stairwell door and press Up to go up, Down to go down. No other way between floors.
@@ -38,7 +38,7 @@ export function hubMap(): TileMap {
   return m;
 }
 
-export const HUB_SPAWN = { x: 22 * T, y: FLOOR.ground - 56 };
+export const HUB_SPAWN = { x: 22 * T, y: FLOOR.ground - 64 };
 
 const G = FLOOR.ground, P = FLOOR.top;
 export const HUB_STATIONS: HubStation[] = [
@@ -75,8 +75,6 @@ export const HUB_PROPS: Prop[] = [
   { key: 'h2_globe_big', x: 1000, y: G - 26, h: 92, holo: true, glow: 0x46c8ff, bob: true },
   { key: 'h2_console', x: 1130, y: G, h: 44 },
   { key: 'h2_console', x: 880, y: G, h: 44, flip: true },
-  { key: 'h2_globe_red', x: 1210, y: G - 50, h: 34, holo: true, bob: true },
-  { key: 'h2_globe_green', x: 790, y: G - 50, h: 34, holo: true, bob: true },
   { key: 'h2_bench_hazard', x: 1240, y: G, h: 26 },
   { key: 'h2_barrier', x: 760, y: G, h: 22 },
   { key: 'h2_led_strip', x: 1000, y: G - 150, h: 10, glow: 0x46e6ff },

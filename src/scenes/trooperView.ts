@@ -5,7 +5,7 @@
  * so the blade takes whatever crystal colour is equipped. Dual form adds a mirrored rear blade.
  */
 import Phaser from 'phaser';
-import { Player } from '../game/player';
+import { CHAR_SCALE, Player } from '../game/player';
 import { Enemy, enemyAnim } from '../game/enemies';
 import { SABER_COLORS, SaberColor } from '../game/profile';
 
@@ -44,7 +44,7 @@ export class TrooperView {
     this.meta = scene.cache.json.get('trooperMeta');
     const M = this.meta;
     const mk = (key: string, d: number, blend = Phaser.BlendModes.NORMAL) =>
-      scene.add.sprite(0, 0, key, 0).setOrigin(0.5, M.feetY / M.frameHeight).setScale(M.scale).setDepth(depth + d).setBlendMode(blend);
+      scene.add.sprite(0, 0, key, 0).setOrigin(0.5, M.feetY / M.frameHeight).setScale(M.scale * CHAR_SCALE).setDepth(depth + d).setBlendMode(blend);
     this.layers.rearHalo = mk('trooper_halo', -0.2);
     this.layers.rearCore = mk('trooper_core', -0.19);
     this.layers.rearGlow = mk('trooper_glow', -0.18, Phaser.BlendModes.ADD);
@@ -85,7 +85,7 @@ export class TrooperView {
     if (p.state === 'wall') face = p.wallDir; // hugging the wall
     const px = b.x + b.w / 2;
     // hanging: the frame's top (the hands) sits on the ledge
-    const py = p.state === 'ledge' ? b.y + 6 + fm.h : b.y + b.h;
+    const py = p.state === 'ledge' ? b.y + 6 + fm.h * CHAR_SCALE : b.y + b.h;
     const blade = p.weapon === 'saber' && !!fm.glow;
     for (const [key, s] of Object.entries(this.layers)) {
       const rear = key.startsWith('rear');
@@ -112,7 +112,7 @@ export class EnemyView {
   constructor(scene: Phaser.Scene, readonly e: Enemy, depth = 1.8) {
     this.meta = scene.cache.json.get(e.kind + 'Meta');
     const M = this.meta;
-    this.sprite = scene.add.sprite(0, 0, e.kind, 0).setOrigin(0.5, M.feetY / M.frameHeight).setScale(M.scale).setDepth(depth);
+    this.sprite = scene.add.sprite(0, 0, e.kind, 0).setOrigin(0.5, M.feetY / M.frameHeight).setScale(M.scale * CHAR_SCALE).setDepth(depth);
     this.bar = scene.add.graphics().setDepth(depth + 0.1);
   }
 

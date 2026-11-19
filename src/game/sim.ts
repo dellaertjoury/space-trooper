@@ -3,7 +3,7 @@ import { InputFrame } from '../core/input';
 import { Rng } from '../core/rng';
 import { moveX, overlaps, Rect, T, TileMap } from '../core/tilemap';
 import { LevelDef, testRoom } from './level';
-import { GameEvent, Player, TUNE } from './player';
+import { GameEvent, Player, STAND_H, TUNE } from './player';
 import { Enemy, ENEMY, ecx, hurtEnemy, makeEnemy, swingBox, updateEnemy } from './enemies';
 import { BTN } from '../core/input';
 import { DEFAULT_LOADOUT, Loadout } from './profile';
@@ -274,7 +274,7 @@ export class Sim {
     if (this.map.solidAt(b) && p.state !== 'climb') out.push(`player overlaps a solid tile in state ${p.state}`);
     if (b.x < 0 || b.y < 0 || b.x + b.w > this.map.pixelW || b.y + b.h > this.map.pixelH) out.push('player outside level bounds');
     if (Math.abs(p.vx) > 20 || Math.abs(p.vy) > 20) out.push(`impossible velocity vx=${p.vx.toFixed(2)} vy=${p.vy.toFixed(2)}`);
-    if (b.h !== 56 && p.state !== 'roll' && p.state !== 'dead') out.push(`hitbox height ${b.h} outside a roll (state ${p.state})`);
+    if (b.h !== STAND_H && p.state !== 'roll' && p.state !== 'dead') out.push(`hitbox height ${b.h} outside a roll (state ${p.state})`);
     if (p.attack.stage < 0 || p.attack.stage > 3) out.push('invalid combo stage');
     if (this.bolts.length > 60) out.push('bolt leak: more than 60 bolts alive');
     if (p.hp < 0 || p.hp > p.maxHp) out.push(`player hp out of range (${p.hp})`);
