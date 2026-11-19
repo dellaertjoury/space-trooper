@@ -34,7 +34,7 @@ export async function runKid(browser, url, { seconds = 45, seed = 7 } = {}) {
     async pauseSpam() { const d = r.pick(['left', 'right']); await down(d); for (let i = 0; i < r.int(2, 6); i++) await tap('pause', 50); await up(d); await sleep(150); if (await page.evaluate(() => __ST.paused())) await tap('pause'); },
     async helpToggle() { await tap('help'); await sleep(400); await tap('help'); },
     async climbAttempt() { const d = r.pick(['left', 'right']); await down(d); await down('jump'); await sleep(r.int(300, 700)); await up('jump'); await sleep(200); await tap('jump'); await tap('up'); await sleep(500); await releaseAll(); },
-    async dropThrough() { await tap('down', 80); await sleep(400); },
+    async dropThrough() { await tap('down', 400); await sleep(300); },
   };
   const weights = [['runAway', 5], ['jumpMash', 5], ['attackMash', 3], ['swapSpam', 2], ['rollSpam', 3], ['everything', 2], ['oppositeDirections', 1], ['idle', 2], ['pauseSpam', 2], ['helpToggle', 1], ['climbAttempt', 3], ['dropThrough', 2]];
   const total = weights.reduce((a, [, w]) => a + w, 0);

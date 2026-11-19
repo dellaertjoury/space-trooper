@@ -76,11 +76,11 @@ export function testRoom(): LevelDef {
       { ...tile(3, 22), color: 'warm' }, { ...tile(13, 13), color: 'green' }, { ...tile(24, 22), color: 'cool' },
       { ...tile(40, 23), color: 'warm' }, { ...tile(50, 21), color: 'green' }, { ...tile(61, 20), color: 'warm' },
       { ...tile(66, 14), color: 'cool' }, { ...tile(72, 18), color: 'green' }, { ...tile(83, 22), color: 'warm' },
-      { ...tile(96, 17), color: 'cool' }, { ...tile(107, 22), color: 'warm' },
+      { ...tile(96, 17), color: 'cool' },
     ],
     signs: [
       { ...tile(4, 26), text: 'MOVE ← →   JUMP ↑ (TWICE: FLIP)' },
-      { ...tile(26, 26), text: 'STAND STILL + ↓ : DROP' },
+      { ...tile(26, 26), text: 'HOLD ↓ : DROP THROUGH' },
       { ...tile(49, 26), text: 'ROLL ↓' },
       { ...tile(62, 26), text: 'WALL JUMP' },
       { ...tile(76, 26), text: 'GRAB LEDGES' },

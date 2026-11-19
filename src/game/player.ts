@@ -36,7 +36,12 @@ export const TUNE = {
   wallJumpLock: 10,
   climbFrames: 18,
   dropFrames: 12,
+  dropHold: 10,        // hold Down this long (standing still on a platform) to drop through it
   shootCooldown: 13,
+  heatPerShot: 22,     // blaster heat: 5 quick shots and it overheats
+  heatCoolDelay: 16,   // frames after the last shot before it starts cooling
+  heatCool: 1.1,       // heat lost per frame while cooling
+  heatResume: 30,      // an overheated blaster fires again once it's back under this
   boltSpeed: 12,
 };
 
@@ -55,7 +60,7 @@ export const COMBO = [
 ];
 
 export interface GameEvent {
-  type: 'exit' | 'hurt' | 'death' | 'loot' | 'enemyshoot' | 'enemyswing' | 'jump' | 'doublejump' | 'walljump' | 'land' | 'roll' | 'slash' | 'shoot' | 'swap' | 'ledge' | 'climb' | 'drop' | 'hit' | 'kill' | 'boltwall';
+  type: 'exit' | 'overheat' | 'hurt' | 'death' | 'loot' | 'enemyshoot' | 'enemyswing' | 'jump' | 'doublejump' | 'walljump' | 'land' | 'roll' | 'slash' | 'shoot' | 'swap' | 'ledge' | 'climb' | 'drop' | 'hit' | 'kill' | 'boltwall';
   x: number;
   y: number;
   dir?: number;
@@ -95,6 +100,11 @@ export class Player {
   attack = { stage: 0, t: 0, queued: false, id: 0, air: false };
   shootCd = 0;
   shootT = 0;
+  heat = 0;             // 0..100
+  overheated = false;
+  private heatT = 0;
+  private downHold = 0;
+  private downRoll = false;
   landT = 0;
   djT = 0; // double-jump animation timer
   wjT = 0; // wall-jump (backflip) animation timer
@@ -184,19 +194,23 @@ export class Player {
   }
 
   /** Is there a grabbable ledge in front of the hands right now? */
+  /**
+   * A ledge within reach: its top anywhere from just above the hands down to the knees (b.y + 46),
+   * so reaching the edge of a wall always grabs it or pulls up onto it instead of sliding.
+   * The window is wider than the fastest fall per frame (13 px), so a fast fall can't skip it.
+   */
   private findLedge(map: TileMap, dir: number): { tx: number; top: number } | null {
     const b = this.body;
     const tx = Math.floor((dir > 0 ? b.x + b.w : b.x - 1) / T);
-    // the grab window (20 px) must be wider than the fastest fall per frame (13 px), or a fast fall skips it
-    for (let ty = Math.floor((b.y - 4) / T); ty <= Math.floor((b.y + 16) / T); ty++) {
+    for (let ty = Math.floor((b.y - 4) / T); ty <= Math.floor((b.y + 46) / T); ty++) {
       const top = ty * T;
-      if (top < b.y - 4 || top > b.y + 16) continue;
+      if (top < b.y - 4 || top > b.y + 46) continue;
       if (map.get(tx, ty) !== Tile.Solid || map.get(tx, ty - 1) === Tile.Solid) continue;
       // room to stand on top of the ledge?
       const standX = dir > 0 ? tx * T : (tx + 1) * T - b.w;
       if (map.solidAt({ x: standX, y: top - STAND_H, w: b.w, h: STAND_H })) continue;
       // nothing above the hands on our side
-      if (map.solidAt({ x: b.x, y: top - 8, w: b.w, h: 8 })) continue;
+      if (map.solidAt({ x: b.x, y: Math.min(b.y, top) - 8, w: b.w, h: 8 + Math.max(0, b.y - top) })) continue;
       // the hang position itself must be free (the window can reach a floor or ceiling)
       const hangX = dir > 0 ? tx * T - b.w : (tx + 1) * T;
       if (map.solidAt({ x: hangX, y: top - 6, w: b.w, h: b.h })) continue;
@@ -270,18 +284,26 @@ export class Player {
     // ---------------- drop through a one-way platform: Down while standing still on it
     // (Down is also the roll key on the keyboard, so standing still on a platform means "drop", not "roll")
     const onOneWay = this.state === 'ground' && map.oneWayBelow(b) && !map.solidAt({ ...b, y: b.y + 1 });
-    let dropped = false;
-    if (onOneWay && !dirIn && (pressed(BTN.DOWN) || (held(BTN.DOWN) && pressed(BTN.JUMP))) && !this.attack.stage) {
+    let dropped = false, rollFromTap = false;
+    const drop = () => {
       b.ignoreOneWay = true;
       this.dropT = TUNE.dropFrames;
       this.buffer = 0;
       this.coyote = 0;
+      this.downHold = 0;
       dropped = true;
       events.push({ type: 'drop', x: this.cx, y: this.feet });
-    }
+    };
+    if (onOneWay && !dirIn && !this.attack.stage) {
+      // holding Down drops through; a quick tap is still a roll
+      if (held(BTN.DOWN) && pressed(BTN.JUMP)) drop();
+      else if (pressed(BTN.DOWN)) { this.downHold = 1; this.downRoll = pressed(BTN.ROLL); }
+      else if (this.downHold > 0 && held(BTN.DOWN)) { if (++this.downHold >= TUNE.dropHold) drop(); }
+      else if (this.downHold > 0) { rollFromTap = this.downRoll; this.downHold = 0; }
+    } else this.downHold = 0;
 
     // ---------------- roll
-    if (!dropped && pressed(BTN.ROLL) && this.state !== 'roll' && this.rollCd === 0 && this.state !== 'hurt') {
+    if (!dropped && ((pressed(BTN.ROLL) && this.downHold === 0) || rollFromTap) && this.state !== 'roll' && this.rollCd === 0 && this.state !== 'hurt') {
       const a = this.attack;
       const cancellable = !a.stage || a.t >= this.combo(a.stage).windup + this.combo(a.stage).active;
       if (cancellable) {
@@ -315,13 +337,22 @@ export class Player {
 
     // ---------------- attacks
     const a = this.attack;
-    if (pressed(BTN.ATTACK) && this.state !== 'roll' && this.state !== 'hurt') {
+    // no attacking while hanging, climbing or on a wall: hands are busy
+    const canAttack = this.state === 'ground' || this.state === 'air';
+    if (pressed(BTN.ATTACK) && canAttack) {
       if (this.weapon === 'saber') {
         if (!a.stage) this.startSwing(1, !grounded, events);
         else a.queued = true;
       }
     }
-    if (this.weapon === 'blaster' && held(BTN.ATTACK) && this.shootCd === 0 && this.state !== 'roll' && this.state !== 'hurt') {
+    // blaster heat: cools after a short pause; overheating locks it until it has cooled down
+    if (this.heatT > 0) this.heatT--;
+    else if (this.heat > 0) this.heat = Math.max(0, this.heat - TUNE.heatCool);
+    if (this.overheated && this.heat <= TUNE.heatResume) this.overheated = false;
+    if (this.weapon === 'blaster' && held(BTN.ATTACK) && this.shootCd === 0 && canAttack && !this.overheated) {
+      this.heat = Math.min(100, this.heat + TUNE.heatPerShot);
+      this.heatT = TUNE.heatCoolDelay;
+      if (this.heat >= 100) { this.overheated = true; events.push({ type: 'overheat', x: this.cx, y: b.y }); }
       this.shootCd = TUNE.shootCooldown;
       this.shootT = 10;
       const by = b.y + MUZZLE.dy; // the blaster's muzzle in the shooting frames (chest height)
@@ -332,7 +363,6 @@ export class Player {
       a.t++;
       const c = this.combo(a.stage);
       if (a.t === c.windup) {
-        if (!a.air) this.vx = this.facing * c.lunge;
         events.push({ type: 'slash', x: this.cx, y: b.y, dir: this.facing, stage: a.stage });
       }
       const end = c.windup + c.active + c.recover;
@@ -354,7 +384,7 @@ export class Player {
       } else {
         const target = attacking && grounded ? 0 : dirIn * TUNE.runSpeed;
         const accel = grounded ? (dirIn && !attacking ? TUNE.groundAccel : TUNE.groundDecel) : TUNE.airAccel;
-        if (attacking && grounded) this.vx *= 0.82;
+        if (attacking && grounded) this.vx = 0; // plant the feet while swinging
         else if (this.vx < target) this.vx = Math.min(target, this.vx + accel);
         else if (this.vx > target) this.vx = Math.max(target, this.vx - accel);
         if (dirIn && !attacking && this.shootT === 0) this.facing = dirIn;
@@ -431,43 +461,24 @@ export class Player {
 
     // already on the wall: stay on it while it's there (no need to keep holding towards it)
     if (this.state === 'wall' && this.touchingWall(map, this.wallDir) && this.wallAway < TUNE.wallLetGo && !attacking) {
-      if (this.ledgeCd === 0 && dirIn === this.wallDir) {
+      // sliding down past the top of the wall: grab it (no need to hold towards it)
+      if (this.ledgeCd === 0) {
         const L = this.findLedge(map, this.wallDir);
-        if (L) {
-          this.ledge = { tx: L.tx, top: L.top, dir: this.wallDir };
-          b.y = L.top - 6; b.ry = 0;
-          b.x = this.wallDir > 0 ? L.tx * T - b.w : (L.tx + 1) * T; b.rx = 0;
-          this.vx = this.vy = 0;
-          this.facing = this.wallDir;
-          this.airJumps = 1;
-          this.setState('ledge');
-          events.push({ type: 'ledge', x: this.cx, y: b.y });
-          return;
-        }
+        if (L) { this.grabLedge(L, this.wallDir, events); return; }
       }
       return;
     }
     if (this.state === 'wall') { this.wallCoyote = TUNE.wallCoyote; this.lastWallDir = this.wallDir; }
 
-    // wall slide / ledge grab while falling (or near the top of a jump) and pushing into a wall
+    // ledge grab / wall slide when pushing into a wall: ledges can be caught near the top of a jump too
     const pushDir = dirIn;
-    if (this.vy >= -1 && pushDir && this.touchingWall(map, pushDir) && !attacking) {
+    if (pushDir && this.touchingWall(map, pushDir) && !attacking && this.vy >= -4) {
       if (this.ledgeCd === 0) {
         const L = this.findLedge(map, pushDir);
-        if (L) {
-          this.ledge = { tx: L.tx, top: L.top, dir: pushDir };
-          b.y = L.top - 6;
-          b.ry = 0;
-          b.x = pushDir > 0 ? L.tx * T - b.w : (L.tx + 1) * T;
-          b.rx = 0;
-          this.vx = this.vy = 0;
-          this.facing = pushDir;
-          this.airJumps = 1;
-          this.setState('ledge');
-          events.push({ type: 'ledge', x: this.cx, y: b.y });
-          return;
-        }
+        if (L) { this.grabLedge(L, pushDir, events); return; }
       }
+    }
+    if (this.vy >= -1 && pushDir && this.touchingWall(map, pushDir) && !attacking) {
       this.wallDir = pushDir;
       this.wallAway = 0;
       this.facing = -pushDir; // face away from the wall, ready to jump off
@@ -476,6 +487,27 @@ export class Player {
       return;
     }
     this.setState('air');
+  }
+
+  /** Take a ledge: hang from it, or if it's already at chest height, pull straight up onto it. */
+  private grabLedge(L: { tx: number; top: number }, dir: number, events: GameEvent[]) {
+    const b = this.body;
+    this.ledge = { tx: L.tx, top: L.top, dir };
+    this.vx = this.vy = 0;
+    this.facing = dir;
+    this.airJumps = 1;
+    if (L.top > b.y + 16) {
+      this.setState('climb');
+      this.climbT = Math.round(TUNE.climbFrames * 0.35); // already half way up
+      this.climbFrom = { x: b.x, y: b.y };
+      this.climbTo = { x: dir > 0 ? L.tx * T : (L.tx + 1) * T - b.w, y: L.top - STAND_H };
+      events.push({ type: 'climb', x: this.cx, y: b.y });
+      return;
+    }
+    b.y = L.top - 6; b.ry = 0;
+    b.x = dir > 0 ? L.tx * T - b.w : (L.tx + 1) * T; b.rx = 0;
+    this.setState('ledge');
+    events.push({ type: 'ledge', x: this.cx, y: b.y });
   }
 
   /** Is the top of the wall we cling to within vaulting reach (about 4 tiles above the head)? */

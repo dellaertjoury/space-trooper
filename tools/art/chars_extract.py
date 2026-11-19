@@ -249,7 +249,8 @@ ANIMS = {
         'doublejump': ('roll', [1, 2, 3, 4, 5], 20, False),  # a flip, not a second jump pose
         'walljump': ('jump', [1, 2], 10, False), 'wallslide': ('grapple', [0], 1, True),
         'ledgehang': ('grapple', [1], 1, True), 'climb': ('grapple', [2, 3], 8, False),
-        'saber1': ('melee', [1, 3, 6], 18, False), 'saber2': ('melee', [2, 4, 6], 18, False), 'saber3': ('melee', [0, 5, 6], 14, False),
+        # the full swing; the game spreads frames 0-2 over the wind-up, 3-5 over the hit, 6 over the recovery
+        'saber1': ('melee', [0, 1, 2, 3, 4, 5, 6], 30, False), 'saber2': ('melee', [0, 1, 2, 3, 4, 5, 6], 30, False), 'saber3': ('melee', [0, 1, 2, 3, 4, 5, 6], 30, False),
         'shoot': ('shoot', [1, 2, 3], 18, False), 'roll': ('roll', None, 22, False),
         'hurt': ('hurt', None, 14, False), 'death': ('die', None, 8, False),
     },

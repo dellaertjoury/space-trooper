@@ -1,7 +1,7 @@
 /** The whole game world, stepped at a fixed 60 Hz. Deterministic: same seed + inputs = same result. */
 import { InputFrame } from '../core/input';
 import { Rng } from '../core/rng';
-import { overlaps, Rect, T, TileMap } from '../core/tilemap';
+import { moveX, overlaps, Rect, T, TileMap } from '../core/tilemap';
 import { LevelDef, testRoom } from './level';
 import { GameEvent, Player, TUNE } from './player';
 import { Enemy, ENEMY, ecx, hurtEnemy, makeEnemy, swingBox, updateEnemy } from './enemies';
@@ -61,23 +61,13 @@ export class Sim {
     if (this.freeze > 0) { this.freeze--; this.pendingPressed |= inp.pressed; return; }
     if (this.pendingPressed) { inp = { ...inp, pressed: inp.pressed | (this.pendingPressed & inp.held) }; this.pendingPressed = 0; }
     const p = this.player;
-    // Space at the exit door means "leave", not "attack" (unless a raider is on you: then it's a swing)
-    const ex = this.level.exit;
-    const threat = this.enemies.some((e) => e.state !== 'dead' && e.aggro && Math.abs(ecx(e) - p.cx) < 160);
-    if (ex && (inp.pressed & BTN.ATTACK) && overlaps(p.body, ex) && p.state !== 'dead' && !threat) {
-      this.exitRequested = true;
-      this.events.push({ type: 'exit', x: ex.x, y: ex.y });
-      inp = { held: inp.held & ~BTN.ATTACK, pressed: inp.pressed & ~BTN.ATTACK, released: inp.released };
+    // when something can be used (a crate, the exit door) a prompt shows and Space uses it instead of attacking
+    const use = this.interaction();
+    if (use && (inp.pressed & BTN.ATTACK)) {
+      if (use.kind === 'crate') this.openCrate(use.crate!);
+      else { this.exitRequested = true; this.events.push({ type: 'exit', x: use.x, y: use.y }); }
     }
-    // Space next to a closed crate opens it (no need to hit it)
-    if ((inp.pressed & BTN.ATTACK) && p.state === 'ground') {
-      const reach = { x: p.body.x - 10, y: p.body.y, w: p.body.w + 20, h: p.body.h };
-      const crate = this.crates.find((c) => !c.open && overlaps(reach, c));
-      if (crate) {
-        this.openCrate(crate);
-        inp = { held: inp.held & ~BTN.ATTACK, pressed: inp.pressed & ~BTN.ATTACK, released: inp.released };
-      }
-    }
+    if (use) inp = { held: inp.held & ~BTN.ATTACK, pressed: inp.pressed & ~BTN.ATTACK, released: inp.released };
     p.update(this.map, inp, this.events, (x, y, dir) => {
       this.bolts.push({ id: ++this.boltId, x, y, vx: dir * TUNE.boltSpeed, vy: 0, life: 70, dead: false, dmg: Math.round(7 * this.loadout.blasterDmg) });
       this.stats.shots++;
@@ -99,6 +89,7 @@ export class Sim {
         if (p.damage(this.map, ENEMY.raider.dmg, e.facing, this.events)) { e.lastHitId = -2 - e.swingId; this.freeze = Math.max(this.freeze, 5); }
       }
     }
+    this.separate();
 
     // turret drone: follows behind the shoulder, fires an aimed bolt at the nearest droid in range
     if (this.drone) {
@@ -210,6 +201,41 @@ export class Sim {
       this.stats.kills++;
       this.stats.credits += 15;
       this.events.push({ type: 'kill', x: d.x + d.w / 2, y: d.y + d.h / 2 });
+    }
+  }
+
+  /** What Space would use right now, if anything (also drives the on-screen prompt). */
+  interaction(): { kind: 'crate' | 'exit'; x: number; y: number; crate?: Crate } | null {
+    const p = this.player;
+    if (p.state !== 'ground' || p.attack.stage) return null;
+    const reach = { x: p.body.x - 10, y: p.body.y, w: p.body.w + 20, h: p.body.h };
+    const crate = this.crates.find((c) => !c.open && overlaps(reach, c));
+    if (crate) return { kind: 'crate', x: crate.x + crate.w / 2, y: crate.y, crate };
+    const ex = this.level.exit;
+    const threat = this.enemies.some((e) => e.state !== 'dead' && e.aggro && Math.abs(ecx(e) - p.cx) < 160);
+    if (ex && overlaps(p.body, ex) && !threat) return { kind: 'exit', x: ex.x + ex.w / 2, y: ex.y + ex.h };
+    return null;
+  }
+
+  /**
+   * Enemies are solid to walk into: the Trooper is pushed back out (or, against a wall, the enemy is).
+   * Rolling goes through them, and jumping over them works because only a side-by-side overlap counts.
+   */
+  private separate() {
+    const p = this.player, b = p.body;
+    if (p.state === 'roll' || p.state === 'dead' || p.state === 'climb' || p.state === 'ledge') return;
+    for (const e of this.enemies) {
+      if (e.state === 'dead' || !overlaps(b, e.body)) continue;
+      const eb = e.body;
+      if (b.y + b.h <= eb.y + 14) continue; // clearing its head
+      const dir = Math.sign(p.cx - ecx(e)) || -p.facing;
+      const overlap = dir > 0 ? eb.x + eb.w - b.x : b.x + b.w - eb.x;
+      if (overlap <= 0) continue;
+      const x0 = b.x;
+      moveX(this.map, b, dir * overlap);
+      const left = overlap - Math.abs(b.x - x0);
+      if (left > 0) moveX(this.map, eb, -dir * left);
+      if (Math.sign(p.vx) === -dir) p.vx = 0;
     }
   }
 

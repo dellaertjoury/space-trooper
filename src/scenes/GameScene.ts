@@ -50,6 +50,8 @@ export class GameScene extends Phaser.Scene {
   private crateViews: Phaser.GameObjects.Image[] = [];
   private deadT = 0;
   private exitDoor?: SlidingDoor;
+  private heatBar!: Phaser.GameObjects.Graphics;
+  private usePrompt?: Phaser.GameObjects.Text;
   private bgFar!: Phaser.GameObjects.TileSprite;
   private bgNear!: Phaser.GameObjects.TileSprite;
   private hud!: Phaser.GameObjects.Container;
@@ -151,8 +153,6 @@ export class GameScene extends Phaser.Scene {
     if (ex) {
       this.exitDoor = new SlidingDoor(this, ex.x + ex.w / 2, ex.y + ex.h, 0.6, 70);
       const top = ex.y + ex.h - DOOR_H;
-      this.add.image(ex.x + ex.w / 2, top + 30, 'glowWarm').setBlendMode(Phaser.BlendModes.ADD).setScale(0.3).setAlpha(0.6);
-      this.add.text(ex.x + ex.w / 2, top - 22, 'SPACE', { fontFamily: 'Oswald, Impact, sans-serif', fontSize: '8px', color: '#140e1e', backgroundColor: '#ffd58a', padding: { x: 3, y: 0 } }).setOrigin(0.5).setResolution(3);
       this.add.text(ex.x + ex.w / 2, top - 10, 'CANTINA', { fontFamily: 'Oswald, Impact, sans-serif', fontSize: '11px', color: '#ffd58a', stroke: '#140e1e', strokeThickness: 3 }).setOrigin(0.5).setResolution(3);
     }
     if (this.webgl) this.cameras.main.postFX.addVignette(0.5, 0.5, 0.92, 0.3);
@@ -295,6 +295,14 @@ export class GameScene extends Phaser.Scene {
       im.setPosition(bo.x, bo.y).setRotation(Math.atan2(bo.vy, Math.abs(bo.vx)) * Math.sign(bo.vx || 1)).setFlipX(bo.vx < 0);
     });
     for (const v of this.enemyViews) v.update();
+    // "SPACE · OPEN" over whatever Space would use right now (then Space doesn't attack)
+    const use = sim.interaction();
+    if (!this.usePrompt) this.usePrompt = this.add.text(0, 0, '', { fontFamily: 'Oswald, Impact, sans-serif', fontSize: '8px', color: '#140e1e', backgroundColor: '#ffd58a', padding: { x: 4, y: 1 } }).setOrigin(0.5, 1).setResolution(3).setDepth(8);
+    this.usePrompt.setVisible(!!use && !this.paused);
+    if (use) {
+      this.usePrompt.setText(use.kind === 'crate' ? 'SPACE  ·  OPEN' : 'SPACE  ·  BACK TO CANTINA');
+      this.usePrompt.setPosition(use.x, use.kind === 'crate' ? use.y - 6 + Math.sin(sim.frame / 8) : use.y - DOOR_H - 18);
+    }
     this.exitDoor?.update(p.cx, p.feet);
     sim.crates.forEach((c, i) => {
       const im = this.crateViews[i];
@@ -366,6 +374,11 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'death': this.cameras.main.shake(200, 0.006); break;
+      case 'overheat': {
+        puff(e.x, e.y + 14, 10, 0xd8dde8, 0.8, 0.6, 600);
+        this.flash('BLASTER OVERHEATED');
+        break;
+      }
       case 'roll': puff(e.x - (e.dir ?? 1) * 8, e.y, 5, 0x8a93ad, 1.2, 0.3); break;
       case 'slash': break; // the swing arc is drawn into the Trooper's saber frames (tinted by the crystal)
       case 'shoot': {
@@ -423,6 +436,9 @@ export class GameScene extends Phaser.Scene {
     };
     this.slotSaber = slot(12, 'saber', 'SABER');
     this.slotBlaster = slot(68, 'blaster_heavy', 'BLASTER');
+    // blaster heat gauge, a thin bar inside the blaster slot
+    this.heatBar = this.add.graphics();
+    this.slotBlaster.add(this.heatBar);
     c.add(this.add.text(126, VIEW_H - 40, 'A / Y swap', { fontFamily: 'monospace', fontSize: '10px', color: '#8d97b3' }).setResolution(3));
     c.add(this.add.text(VIEW_W - 10, VIEW_H - 18, `${BUILD}  ·  F8 log issue  ·  F9 dashboard  ·  H controls  ·  Esc pause`, { fontFamily: 'monospace', fontSize: '10px', color: '#8d97b3' }).setOrigin(1, 0).setResolution(3));
     this.banner = this.add.text(VIEW_W / 2, 70, '', { fontFamily: 'monospace', fontSize: '16px', fontStyle: 'bold', color: '#ffd58a', stroke: '#140e1e', strokeThickness: 4 }).setOrigin(0.5).setResolution(3);
@@ -436,7 +452,7 @@ export class GameScene extends Phaser.Scene {
       'Move                     ← →               stick / d-pad',
       'Jump  (again: flip)      ↑                 A',
       'Roll (dodge)             ↓                 B / RB / RT',
-      'Drop through platform    ↓ standing still  d-pad down',
+      'Drop through platform    hold ↓            hold d-pad down',
       'Attack / fire / use      Space             X',
       'Swap saber / blaster     A                 Y',
       'Abilities (coming)       Z  E  R',
@@ -464,6 +480,10 @@ export class GameScene extends Phaser.Scene {
     const r = this.profile?.res;
     const vals = r ? [r.rareCrystals, r.crystals, r.credits + this.sim.stats.credits, r.droidParts, r.ingots] : [0, 0, this.sim.stats.credits, 0, 0];
     this.resTexts.forEach((t, i) => { const v = 'x' + vals[i]; if (t.text !== v) t.setText(v); });
+    this.heatBar.clear();
+    const hk = p.heat / 100, hot = p.overheated;
+    this.heatBar.fillStyle(0x140e1e).fillRect(4, 3, 42, 4);
+    if (hk > 0) this.heatBar.fillStyle(hot ? (this.sim.frame % 10 < 5 ? 0xff3b3b : 0xff8a5a) : hk > 0.7 ? 0xff7a2e : 0xffc04a).fillRect(5, 4, 40 * hk, 2);
     this.slotSaber.setAlpha(p.weapon === 'saber' ? 1 : 0.45).setY(VIEW_H - (p.weapon === 'saber' ? 62 : 58));
     this.slotBlaster.setAlpha(p.weapon === 'blaster' ? 1 : 0.45).setY(VIEW_H - (p.weapon === 'blaster' ? 62 : 58));
   }

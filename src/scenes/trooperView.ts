@@ -73,8 +73,12 @@ export class TrooperView {
     let fi: number;
     if (a.name.startsWith('saber')) {
       const c = p.combo(Number(a.name.slice(5)));
-      const k = a.t < c.windup ? 0 : a.t < c.windup + c.active ? 1 : 2; // pin the strike frame to the hit window
-      fi = A.frames[k];
+      // play the whole swing, timed to the combo: frames 0-2 wind up, 3-5 land in the hit window, 6 recovers
+      let k: number;
+      if (a.t < c.windup) k = Math.min(2, Math.floor((a.t / c.windup) * 3));
+      else if (a.t < c.windup + c.active) k = 3 + Math.min(2, Math.floor(((a.t - c.windup) / c.active) * 3));
+      else k = 6;
+      fi = A.frames[Math.min(k, A.frames.length - 1)];
     } else fi = frameFor(A, a.t);
     const fm = M.frames[fi];
     let face = p.facing;

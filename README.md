@@ -30,8 +30,8 @@ Press **Space** at a station (or click its sign) to use it. Runs pay credits per
 | Move | ← → | stick / d-pad |
 | Jump (again in the air: flip) | ↑ | A |
 | Roll (dodge) | ↓ | B / RB / RT |
-| Drop through a platform | ↓ while standing still on it | d-pad down |
-| Attack / fire / use (stations, doors) | Space | X |
+| Drop through a platform | hold ↓ while standing still on it | hold d-pad down |
+| Attack / fire (blaster heats up: let it cool) / use (a SPACE prompt shows when something can be used) | Space | X |
 | Swap saber / blaster | A | Y |
 | Abilities (coming) | Z  E  R | |
 | Climb a ledge / let go | ↑ / ↓ | |
