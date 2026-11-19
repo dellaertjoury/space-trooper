@@ -16,7 +16,7 @@ export const TUNE = {
   apexBand: 2.4,    // |vy| below this counts as the top of the jump
   maxFall: 9.5,
   fastFall: 12,
-  jumpVel: -9.4,
+  jumpVel: -9.8,
   doubleJumpVel: -8.2,
   jumpCut: 0.45, // releasing jump early cuts upward speed
   coyoteFrames: 6,
@@ -25,9 +25,14 @@ export const TUNE = {
   rollSpeed: 7,
   rollIframes: [2, 18] as [number, number],
   rollCooldown: 8,
-  wallSlideMax: 2.2,
-  wallJumpVx: 5.5,
-  wallJumpVy: -8.8,
+  wallSlideMax: 1.7,  // top slide speed once the grip gives
+  wallGrip: 0.6,      // slide speed during the first moments on the wall
+  wallGripFrames: 24,
+  wallSlideAccel: 0.06,
+  wallLetGo: 7,       // frames of pushing away before the Trooper lets go of the wall
+  wallCoyote: 6,      // a wall jump still works this many frames after leaving the wall
+  wallJumpVx: 5.2,
+  wallJumpVy: -10.2,
   wallJumpLock: 10,
   climbFrames: 18,
   dropFrames: 12,
@@ -76,6 +81,9 @@ export class Player {
   rollCd = 0;
   wallDir = 0;
   wallLock = 0;
+  wallAway = 0;    // frames spent pushing away from the wall
+  wallCoyote = 0;  // frames left to still wall-jump after sliding off
+  lastWallDir = 0;
   ledge = { tx: 0, top: 0, dir: 0 };
   climbT = 0;
   climbFrom = { x: 0, y: 0 };
@@ -339,7 +347,11 @@ export class Player {
     const attacking = a.stage > 0;
     if (this.state !== 'roll') {
       if (this.wallLock > 0) this.wallLock--;
-      else {
+      else if (this.state === 'wall' && this.wallAway < TUNE.wallLetGo) {
+        // stuck to the wall: no sideways drift, tapping away does not peel you off
+        this.vx = 0;
+        if (dirIn === -this.wallDir) this.wallAway++; else this.wallAway = 0;
+      } else {
         const target = attacking && grounded ? 0 : dirIn * TUNE.runSpeed;
         const accel = grounded ? (dirIn && !attacking ? TUNE.groundAccel : TUNE.groundDecel) : TUNE.airAccel;
         if (attacking && grounded) this.vx *= 0.82;
@@ -363,7 +375,9 @@ export class Player {
         this.coyote = 0;
         a.stage = a.stage && a.t >= this.combo(a.stage).windup + this.combo(a.stage).active ? 0 : a.stage;
         events.push({ type: 'jump', x: this.cx, y: this.feet });
-      } else if (this.state === 'wall' && this.buffer > 0) {
+      } else if ((this.state === 'wall' || this.wallCoyote > 0) && this.buffer > 0) {
+        if (this.state !== 'wall') this.wallDir = this.lastWallDir;
+        this.wallCoyote = 0;
         if (this.wallTopNear(map, this.wallDir)) {
           // vault: the top of this wall is close, so jump straight up and over instead of kicking away
           this.vy = TUNE.jumpVel;
@@ -387,10 +401,14 @@ export class Player {
 
     // ---------------- gravity
     const apex = Math.abs(this.vy) < TUNE.apexBand && held(BTN.JUMP);
-    let maxFall = held(BTN.DOWN) ? TUNE.fastFall : TUNE.maxFall;
-    if (this.state === 'wall') maxFall = TUNE.wallSlideMax;
-    this.vy = Math.min(maxFall, this.vy + (apex ? TUNE.apexGravity : TUNE.gravity));
-    if (this.state === 'wall' && this.vy > maxFall) this.vy = maxFall;
+    const maxFall = held(BTN.DOWN) ? TUNE.fastFall : TUNE.maxFall;
+    if (this.state === 'wall') {
+      // ease into the slide instead of snapping: grip first, then slowly pick up speed
+      const cap = held(BTN.DOWN) ? TUNE.maxFall * 0.6 : this.framesInState < TUNE.wallGripFrames ? TUNE.wallGrip : TUNE.wallSlideMax;
+      if (this.vy > cap) this.vy = Math.max(cap, this.vy - 0.8);
+      else this.vy = Math.min(cap, this.vy + (this.vy < 0 ? TUNE.gravity : TUNE.wallSlideAccel));
+    } else this.vy = Math.min(maxFall, this.vy + (apex ? TUNE.apexGravity : TUNE.gravity));
+    if (this.wallCoyote > 0 && this.state !== 'wall') this.wallCoyote--;
 
     // ---------------- integrate
     const wasGrounded = grounded;
@@ -409,11 +427,31 @@ export class Player {
       if (this.state === 'hurt' && this.framesInState > 18) this.setState(nowGrounded ? 'ground' : 'air');
       return;
     }
-    if (nowGrounded) { this.setState('ground'); return; }
+    if (nowGrounded) { this.wallCoyote = 0; this.setState('ground'); return; }
 
-    // wall slide / ledge grab while falling and pushing into a wall
+    // already on the wall: stay on it while it's there (no need to keep holding towards it)
+    if (this.state === 'wall' && this.touchingWall(map, this.wallDir) && this.wallAway < TUNE.wallLetGo && !attacking) {
+      if (this.ledgeCd === 0 && dirIn === this.wallDir) {
+        const L = this.findLedge(map, this.wallDir);
+        if (L) {
+          this.ledge = { tx: L.tx, top: L.top, dir: this.wallDir };
+          b.y = L.top - 6; b.ry = 0;
+          b.x = this.wallDir > 0 ? L.tx * T - b.w : (L.tx + 1) * T; b.rx = 0;
+          this.vx = this.vy = 0;
+          this.facing = this.wallDir;
+          this.airJumps = 1;
+          this.setState('ledge');
+          events.push({ type: 'ledge', x: this.cx, y: b.y });
+          return;
+        }
+      }
+      return;
+    }
+    if (this.state === 'wall') { this.wallCoyote = TUNE.wallCoyote; this.lastWallDir = this.wallDir; }
+
+    // wall slide / ledge grab while falling (or near the top of a jump) and pushing into a wall
     const pushDir = dirIn;
-    if (this.vy >= 0 && pushDir && this.touchingWall(map, pushDir) && !attacking) {
+    if (this.vy >= -1 && pushDir && this.touchingWall(map, pushDir) && !attacking) {
       if (this.ledgeCd === 0) {
         const L = this.findLedge(map, pushDir);
         if (L) {
@@ -431,6 +469,7 @@ export class Player {
         }
       }
       this.wallDir = pushDir;
+      this.wallAway = 0;
       this.facing = -pushDir; // face away from the wall, ready to jump off
       this.setState('wall');
       this.airJumps = 1;
@@ -450,6 +489,7 @@ export class Player {
   }
 
   private wallJump(dir: number, events: GameEvent[]) {
+    this.wallCoyote = 0;
     this.vx = dir * TUNE.wallJumpVx;
     this.vy = TUNE.wallJumpVy;
     this.facing = dir;

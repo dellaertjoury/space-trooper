@@ -13,8 +13,9 @@ import { drawArmouryRack, drawBarCounter, drawHoloCone, drawHoloTable, drawHubBa
 import { HUB_DROIDS, FLOOR, HUB_H, HUB_PROPS, HUB_SPAWN, HUB_STATIONS, HUB_W, hubMap, SLAB, STAIRS } from '../game/hubLevel';
 import { drawGlow } from '../art/procedural';
 import { closeStation, isStationOpen, navigate, openStation } from '../ui/stations';
+import { SlidingDoor } from './door';
 import { preloadTrooper, TrooperView } from './trooperView';
-import { BUILD, VIEW_H, VIEW_W } from './GameScene';
+import { BUILD, CAM_H, CAM_W, hudLayer, VIEW_H, VIEW_W, ZOOM } from './GameScene';
 import { shared } from './shared';
 import { IssueTracker } from '../debug/issues';
 
@@ -107,6 +108,8 @@ export class CantinaScene extends Phaser.Scene {
       }
     }
     this.buildBarDroid();
+    // the stairwell: the same sliding door on both floors
+    this.doors = [new SlidingDoor(this, STAIRS.cx, FLOOR.ground), new SlidingDoor(this, STAIRS.cx, FLOOR.top)];
 
     // holo-signs over every station (click to open)
     for (const st of HUB_STATIONS) {
@@ -125,9 +128,9 @@ export class CantinaScene extends Phaser.Scene {
     this.stairPrompt = this.add.text(STAIRS.cx, 0, '', { fontFamily: FONT, fontSize: '8px', color: '#140e1e', backgroundColor: '#ffd58a', padding: { x: 4, y: 1 } })
       .setOrigin(0.5).setResolution(3).setDepth(6).setVisible(false);
 
-    // camera: 2x zoom like the run, follows the Trooper in both directions
+    // camera: same zoom as the run, follows the Trooper in both directions
     const cam = this.cameras.main;
-    cam.setZoom(2);
+    cam.setZoom(ZOOM);
     this.camX = this.player.cx; this.camY = this.player.body.y;
     if (this.game.renderer.type === Phaser.WEBGL) cam.postFX.addVignette(0.5, 0.5, 0.9, 0.35);
     cam.fadeIn(400, 8, 6, 12);
@@ -243,6 +246,8 @@ export class CantinaScene extends Phaser.Scene {
 
   // ------------------------------------------------------------ stairs + bar droid
   private stairPrompt!: Phaser.GameObjects.Text;
+  private doors: SlidingDoor[] = [];
+  private hud?: Phaser.GameObjects.Container;
   private transit = false;
   private forgeHolos: Phaser.GameObjects.Image[] = [];
   private droids: { s: Phaser.GameObjects.Sprite; x: number; dir: number; mode: 'walk' | 'idle' | 'wave' | 'bounce'; t: number; waved: boolean; area: typeof HUB_DROIDS[number] }[] = [];
@@ -343,10 +348,11 @@ export class CantinaScene extends Phaser.Scene {
     this.view.update(p);
     this.near = this.stationHere();
     this.updateDroid();
+    for (const d of this.doors) d.update(this.player.cx, this.player.feet, this.transit);
     const fl = this.floorOf();
     const showStair = this.inStairs() && !isStationOpen() && !!fl;
     this.stairPrompt.setVisible(showStair);
-    if (showStair) this.stairPrompt.setText(fl === 'ground' ? '▲  UPSTAIRS' : '▼  DOWNSTAIRS').setY((fl === 'ground' ? FLOOR.ground : FLOOR.top) - 72);
+    if (showStair) this.stairPrompt.setText(fl === 'ground' ? 'PRESS ↑' : 'PRESS ↓').setY((fl === 'ground' ? FLOOR.ground : FLOOR.top) - 142);
     for (const im of this.forgeHolos) { const sc = this.saberHolo(); if (sc.tint) im.setTint(sc.tint); else im.clearTint(); }
     for (const s of this.signs) {
       const on = s.id === this.near;
@@ -357,14 +363,15 @@ export class CantinaScene extends Phaser.Scene {
     // smooth follow; clamp to the room
     this.camX += (p.cx + p.facing * 50 - this.camX) * 0.12;
     this.camY += (p.body.y + 10 - this.camY) * 0.12;
-    const cx = Phaser.Math.Clamp(this.camX, VIEW_W / 2, ROOM_W - VIEW_W / 2);
-    const cy = Phaser.Math.Clamp(this.camY, VIEW_H / 2, ROOM_H - VIEW_H / 2);
+    const cx = Phaser.Math.Clamp(this.camX, CAM_W / 2, ROOM_W - CAM_W / 2);
+    const cy = Phaser.Math.Clamp(this.camY, CAM_H / 2, ROOM_H - CAM_H / 2);
     this.cameras.main.centerOn(cx, cy);
   }
 
   // ------------------------------------------------------------ HUD (resource bar like the reference, big launch button)
   private buildHud(result?: { credits: number; kills: number; defeated?: boolean }) {
-    const c = this.add.container(VIEW_W / 2, VIEW_H / 2).setScrollFactor(0).setDepth(100); // offset for the 2x zoom
+    const c = hudLayer(this.add.container(0, 0)).setDepth(100);
+    this.hud = c;
     const g = this.add.graphics();
     g.fillStyle(0x140e1e, 0.82).fillRoundedRect(10, 8, 190, 50, 8);
     g.lineStyle(2, 0xb0843f).strokeRoundedRect(10, 8, 190, 50, 8);
@@ -417,8 +424,9 @@ export class CantinaScene extends Phaser.Scene {
   }
 
   flash(msg: string) {
-    const t = this.add.text(VIEW_W, VIEW_H * 1.5 - 90, msg, { fontFamily: FONT, fontSize: '14px', color: '#ffd58a', stroke: '#140e1e', strokeThickness: 4 })
-      .setOrigin(0.5).setScrollFactor(0).setDepth(101).setResolution(3);
+    const t = this.add.text(VIEW_W / 2, VIEW_H - 90, msg, { fontFamily: FONT, fontSize: '14px', color: '#ffd58a', stroke: '#140e1e', strokeThickness: 4 })
+      .setOrigin(0.5).setResolution(3);
+    this.hud?.add(t);
     this.tweens.add({ targets: t, alpha: 0, delay: 1400, duration: 500, onComplete: () => t.destroy() });
   }
 

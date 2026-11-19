@@ -5,12 +5,23 @@ import { GameEvent } from '../game/player';
 import { drawBackdrop, drawBlade, drawBolt, drawDummy, drawGlow, drawLamp, drawLevel, drawSlash, drawSpark, CRATE_COLORS, drawCrateSide } from '../art/procedural';
 import { Issue, IssueTracker } from '../debug/issues';
 import { DEFAULT_LOADOUT, Loadout, loadoutFrom, loadProfile, Profile, SABER_COLORS, saveProfile } from '../game/profile';
+import { SlidingDoor } from './door';
+import { DOOR_H } from '../art/doors';
 import { EnemyView, preloadChar, preloadTrooper, TrooperView } from './trooperView';
 import { shared } from './shared';
 
 declare const __BUILD__: string;
 export const BUILD = `v0.1-${__BUILD__}`;
 export const VIEW_W = 960, VIEW_H = 540;
+/** World camera zoom (the canvas is 1920 x 1080). Higher = closer to the Trooper, less of the room on screen. */
+export const ZOOM = 2.5;
+/** how much of the world the camera shows at that zoom */
+export const CAM_W = (2 * VIEW_W) / ZOOM, CAM_H = (2 * VIEW_H) / ZOOM;
+/** Screen-fixed layers live in "HUD units" (960 x 540, 2 px each) whatever the zoom: this places one. */
+export function hudLayer<T extends Phaser.GameObjects.Components.Transform & Phaser.GameObjects.Components.ScrollFactor>(o: T): T {
+  o.setScrollFactor(0).setPosition(VIEW_W - VIEW_W / ZOOM, VIEW_H - VIEW_H / ZOOM).setScale(2 / ZOOM);
+  return o;
+}
 const STEP_MS = 1000 / 60;
 
 
@@ -38,6 +49,7 @@ export class GameScene extends Phaser.Scene {
   private enemyViews: EnemyView[] = [];
   private crateViews: Phaser.GameObjects.Image[] = [];
   private deadT = 0;
+  private exitDoor?: SlidingDoor;
   private bgFar!: Phaser.GameObjects.TileSprite;
   private bgNear!: Phaser.GameObjects.TileSprite;
   private hud!: Phaser.GameObjects.Container;
@@ -97,17 +109,18 @@ export class GameScene extends Phaser.Scene {
     tex('lampCool', drawLamp('#46e6ff'));
     tex('lampGreen', drawLamp('#6cff9a'));
 
-    const SX = VIEW_W / 2, SY = VIEW_H / 2; // screen-space offset under the 2x zoom
-    this.bgFar = this.add.tileSprite(SX, SY, VIEW_W, VIEW_H, 'bgFar').setOrigin(0).setScrollFactor(0).setTileScale(0.5);
-    this.bgNear = this.add.tileSprite(SX, SY, VIEW_W, VIEW_H, 'bgNear').setOrigin(0).setScrollFactor(0).setAlpha(0.9).setTileScale(0.5);
+    // screen-fixed backdrop: covers exactly what the zoomed camera shows
+    const SX = VIEW_W - VIEW_W / ZOOM, SY = VIEW_H - VIEW_H / ZOOM, VW = (2 * VIEW_W) / ZOOM, VH = (2 * VIEW_H) / ZOOM;
+    this.bgFar = this.add.tileSprite(SX, SY, VW, VH, 'bgFar').setOrigin(0).setScrollFactor(0).setTileScale(0.5);
+    this.bgNear = this.add.tileSprite(SX, SY, VW, VH, 'bgNear').setOrigin(0).setScrollFactor(0).setAlpha(0.9).setTileScale(0.5);
     // light shafts
     const shafts = this.add.graphics().setScrollFactor(0.3).setBlendMode(Phaser.BlendModes.ADD);
     for (let i = 0; i < 9; i++) { shafts.fillStyle(0x3a7fbf, 0.05); shafts.fillTriangle(200 + i * 420, -20, 260 + i * 420, -20, 120 + i * 420 + 200, 700); }
 
     // push the backdrop back: dim it, then a teal haze near the floor
-    this.add.rectangle(SX, SY, VIEW_W, VIEW_H, 0x05070f, 0.5).setOrigin(0).setScrollFactor(0);
+    this.add.rectangle(SX, SY, VW, VH, 0x05070f, 0.5).setOrigin(0).setScrollFactor(0);
     const haze = this.add.graphics().setScrollFactor(0).setPosition(SX, SY).setBlendMode(Phaser.BlendModes.ADD);
-    for (let i = 0; i < 12; i++) { haze.fillStyle(0x1f6f7a, 0.018); haze.fillRect(0, VIEW_H - 40 - i * 14, VIEW_W, 40 + i * 14); }
+    for (let i = 0; i < 12; i++) { haze.fillStyle(0x1f6f7a, 0.018); haze.fillRect(0, VH - 40 - i * 14, VW, 40 + i * 14); }
     for (const l of this.sim.level.lamps) {
       const key = l.color === 'warm' ? 'Warm' : l.color === 'cool' ? 'Cool' : 'Green';
       this.add.image(l.x + 12, l.y + 12, 'glow' + key).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9).setScale(0.5);
@@ -136,18 +149,15 @@ export class GameScene extends Phaser.Scene {
     // exit door back to the Cantina
     const ex = this.sim.level.exit;
     if (ex) {
-      const g = this.add.graphics().setDepth(0.5);
-      g.fillStyle(0x140e1e).fillRoundedRect(ex.x - 4, ex.y - 6, ex.w + 8, ex.h + 6, 6);
-      g.fillStyle(0x2a1c18).fillRoundedRect(ex.x, ex.y - 2, ex.w, ex.h + 2, 4);
-      g.fillStyle(0xff9a3c, 0.85).fillRect(ex.x + 4, ex.y + 2, ex.w - 8, 3);
-      g.lineStyle(2, 0xb0843f).strokeRoundedRect(ex.x, ex.y - 2, ex.w, ex.h + 2, 4);
-      this.add.image(ex.x + ex.w / 2, ex.y + 10, 'glowWarm').setBlendMode(Phaser.BlendModes.ADD).setScale(0.3).setAlpha(0.8);
-      this.add.text(ex.x + ex.w / 2, ex.y - 26, 'SPACE', { fontFamily: 'Oswald, Impact, sans-serif', fontSize: '8px', color: '#140e1e', backgroundColor: '#ffd58a', padding: { x: 3, y: 0 } }).setOrigin(0.5).setResolution(3);
-      this.add.text(ex.x + ex.w / 2, ex.y - 14, 'CANTINA', { fontFamily: 'Oswald, Impact, sans-serif', fontSize: '11px', color: '#ffd58a', stroke: '#140e1e', strokeThickness: 3 }).setOrigin(0.5).setResolution(3);
+      this.exitDoor = new SlidingDoor(this, ex.x + ex.w / 2, ex.y + ex.h, 0.6, 70);
+      const top = ex.y + ex.h - DOOR_H;
+      this.add.image(ex.x + ex.w / 2, top + 30, 'glowWarm').setBlendMode(Phaser.BlendModes.ADD).setScale(0.3).setAlpha(0.6);
+      this.add.text(ex.x + ex.w / 2, top - 22, 'SPACE', { fontFamily: 'Oswald, Impact, sans-serif', fontSize: '8px', color: '#140e1e', backgroundColor: '#ffd58a', padding: { x: 3, y: 0 } }).setOrigin(0.5).setResolution(3);
+      this.add.text(ex.x + ex.w / 2, top - 10, 'CANTINA', { fontFamily: 'Oswald, Impact, sans-serif', fontSize: '11px', color: '#ffd58a', stroke: '#140e1e', strokeThickness: 3 }).setOrigin(0.5).setResolution(3);
     }
     if (this.webgl) this.cameras.main.postFX.addVignette(0.5, 0.5, 0.92, 0.3);
 
-    this.cameras.main.setZoom(2);
+    this.cameras.main.setZoom(ZOOM);
     this.snapCamera();
     this.buildHud();
 
@@ -260,8 +270,8 @@ export class GameScene extends Phaser.Scene {
 
   private snapCamera() {
     const p = this.sim.player.body;
-    this.camX = p.x - VIEW_W / 2;
-    this.camY = p.y - VIEW_H * 0.55;
+    this.camX = p.x - CAM_W / 2;
+    this.camY = p.y - CAM_H * 0.55;
   }
 
   render() {
@@ -285,6 +295,7 @@ export class GameScene extends Phaser.Scene {
       im.setPosition(bo.x, bo.y).setRotation(Math.atan2(bo.vy, Math.abs(bo.vx)) * Math.sign(bo.vx || 1)).setFlipX(bo.vx < 0);
     });
     for (const v of this.enemyViews) v.update();
+    this.exitDoor?.update(p.cx, p.feet);
     sim.crates.forEach((c, i) => {
       const im = this.crateViews[i];
       if (!im) return;
@@ -307,14 +318,14 @@ export class GameScene extends Phaser.Scene {
     });
 
     // camera: look ahead in the facing direction, settle vertically
-    const tx = b.x + b.w / 2 - VIEW_W / 2 + p.facing * 70;
-    const ty = b.y + b.h / 2 - VIEW_H * 0.55;
+    const tx = b.x + b.w / 2 - CAM_W / 2 + p.facing * 56;
+    const ty = b.y + b.h / 2 - CAM_H * 0.55;
     if (this.testMode) { this.camX = tx; this.camY = ty; }
     this.camX += (tx - this.camX) * 0.1;
     this.camY += (ty - this.camY) * (Math.abs(ty - this.camY) > 120 ? 0.18 : 0.08);
     const cam = this.cameras.main;
-    const vx = Phaser.Math.Clamp(this.camX, 0, sim.map.pixelW - VIEW_W), vy = Phaser.Math.Clamp(this.camY, 0, sim.map.pixelH - VIEW_H);
-    cam.centerOn(vx + VIEW_W / 2, vy + VIEW_H / 2);
+    const vx = Phaser.Math.Clamp(this.camX, 0, sim.map.pixelW - CAM_W), vy = Phaser.Math.Clamp(this.camY, 0, sim.map.pixelH - CAM_H);
+    cam.centerOn(vx + CAM_W / 2, vy + CAM_H / 2);
     this.bgFar.tilePositionX = vx * 0.3; this.bgFar.tilePositionY = vy * 0.1;
     this.bgNear.tilePositionX = vx * 0.8; this.bgNear.tilePositionY = vy * 0.4;
 
@@ -379,7 +390,7 @@ export class GameScene extends Phaser.Scene {
 
   // ------------------------------------------------------------ HUD
   private buildHud() {
-    const c = this.add.container(VIEW_W / 2, VIEW_H / 2).setScrollFactor(0).setDepth(100); // offset for the 2x zoom
+    const c = hudLayer(this.add.container(0, 0)).setDepth(100);
     this.hud = c;
     const frame = (x: number, y: number, w: number, h: number) => {
       const g = this.add.graphics();
@@ -458,9 +469,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   flash(msg: string) {
-    const t = this.add.text(VIEW_W, VIEW_H * 1.5 - 90, msg, { fontFamily: 'monospace', fontSize: '13px', color: '#ffd58a', stroke: '#140e1e', strokeThickness: 4 })
-      .setOrigin(0.5).setScrollFactor(0).setDepth(101).setResolution(3);
-    this.tweens.add({ targets: t, alpha: 0, y: VIEW_H * 1.5 - 104, delay: 900, duration: 500, onComplete: () => t.destroy() });
+    const t = this.add.text(VIEW_W / 2, VIEW_H - 90, msg, { fontFamily: 'monospace', fontSize: '13px', color: '#ffd58a', stroke: '#140e1e', strokeThickness: 4 })
+      .setOrigin(0.5).setResolution(3);
+    this.hud?.add(t);
+    this.tweens.add({ targets: t, alpha: 0, y: VIEW_H - 104, delay: 900, duration: 500, onComplete: () => t.destroy() });
   }
 
   // ------------------------------------------------------------ issue context

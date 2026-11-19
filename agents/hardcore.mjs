@@ -96,7 +96,7 @@ export async function runHardcore(browser, url, { seed = 11, fuzzPerStart = 24 }
     { name: 'Climb the wall-jump shaft onto the right pillar', start: { tx: 61, ty: 26 }, goal: { x0: 70, x1: 71, y0: 10, y1: 10 } },
     { name: 'Roll under the hanging wall', start: { tx: 50, ty: 26 }, goal: { x0: 58, x1: 60, y0: 25, y1: 25 } },
     { name: 'Reach the high platform from the ledge block', start: { tx: 79, ty: 21 }, goal: { x0: 86, x1: 96, y0: 14, y1: 14 } },
-    { name: 'Get over the low wall to the last droid', start: { tx: 92, ty: 26 }, via: [{ x0: 97, x1: 99, y0: 18, y1: 18 }], goal: { x0: 101, x1: 107, y0: 25, y1: 25 } },
+    { name: 'Get over the low wall to the exit', start: { tx: 92, ty: 26 }, via: [{ x0: 97, x1: 99, y0: 18, y1: 18 }], goal: { x0: 101, x1: 107, y0: 25, y1: 25 } },
     { name: 'Climb out of the pit', start: { tx: 45, ty: 28 }, goal: { x0: 48, x1: 50, y0: 25, y1: 25 } },
     { name: 'Single-wall climb (right side of the pillar, no second wall)', start: { tx: 72, ty: 26 }, goal: { x0: 70, x1: 71, y0: 10, y1: 10 }, exploit: true },
   ];
@@ -170,10 +170,12 @@ export async function runHardcore(browser, url, { seed = 11, fuzzPerStart = 24 }
   rep.check('no clips or out-of-bounds found', !rep.issues.some((i) => i.category === 'collision'));
 
   // ---------------------------------------------------------------- 4. balance
+  // measured on test-only training targets (the game itself has none): a fixed target makes DPS comparable
   const nearDummy = { tx: 88, ty: 26 };
-  const sab = await sim(expand(Array.from({ length: 50 }, () => [[A, 1], [0, 5]]).flat()), nearDummy);
-  const blas = await sim(expand([[S, 1], [0, 2], [A, 300]]), nearDummy);
-  const cancel = await sim(expand(Array.from({ length: 30 }, () => [[A, 1], [0, 10], [RO, 1], [0, 1]]).flat()), nearDummy);
+  const TARGETS = { enemies: false, dummies: true };
+  const sab = await sim(expand(Array.from({ length: 50 }, () => [[A, 1], [0, 5]]).flat()), nearDummy, TARGETS);
+  const blas = await sim(expand([[S, 1], [0, 2], [A, 300]]), nearDummy, TARGETS);
+  const cancel = await sim(expand(Array.from({ length: 30 }, () => [[A, 1], [0, 10], [RO, 1], [0, 1]]).flat()), nearDummy, TARGETS);
   const sec = (x) => x.state.frame / 60;
   const dps = { saberCombo: Math.round(sab.state.stats.damage / sec(sab)), blaster: Math.round(blas.state.stats.damage / sec(blas)), saberRollCancel: Math.round(cancel.state.stats.damage / sec(cancel)) };
   rep.metric('dps', dps);

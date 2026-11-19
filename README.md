@@ -6,7 +6,7 @@ A Dead Cells-style roguelite platformer in a space-opera universe, built for the
 
 ## Status: Phase 3 started (enemies)
 
-The Trooper on the Training Deck can run, jump, flip (double jump), roll (with invincibility frames), wall slide, wall jump, vault low walls, grab and climb ledges, drop through platforms, swing a three-hit saber combo, fire the blaster, and swap weapons. Two Dune Raiders patrol the deck: the **brute** (staff, closes in and swings) and the **gunner** (rifle, keeps its distance and fires red bolts). Both glow red while winding up: roll through the attack or jump it. Supply crates break open for credits; training droids still take hits.
+The Trooper on the Training Deck can run, jump, flip (double jump), roll (with invincibility frames), wall slide, wall jump, vault low walls, grab and climb ledges, drop through platforms, swing a three-hit saber combo, fire the blaster, and swap weapons. Two Dune Raiders patrol the deck: the **brute** (staff, closes in and swings) and the **gunner** (rifle, keeps its distance and fires red bolts). Both glow red while winding up: roll through the attack or jump it. Supply crates open for credits (stand next to one and press Space, or hit it).
 
 ## The Cantina (hub)
 
@@ -21,7 +21,7 @@ Every session starts in the Cantina, two floors joined by a stairwell in the mid
 | Upper | Armoury | Craft and upgrade 4 gear pieces: chest (+health), shoulder (+saber damage), gauntlets (+blaster damage), boots (faster roll recovery) |
 | Upper | Droid Workshop | Build and deploy a companion: Turret drone (shoots blue bolts) or Medic droid (+health) |
 
-Press **Space** at a station (or click its sign) to use it. Runs pay credits per enemy and per crate. Leave through the CANTINA door at the end of the Training Deck with **Space**, or pause and press C. If you fall, you're carried back to the Cantina and keep what you earned. Progress is saved in your browser. The testing build starts you with 400 credits, 5 crystals, 1 rare crystal, 10 droid parts and 6 ingots. `?scene=run` skips the Cantina.
+Press **Space** at a station (or click its sign) to use it. Runs pay credits per enemy and per crate. Leave through the sliding CANTINA door at the end of the Training Deck with **Space**, or pause and press C. If you fall, you're carried back to the Cantina and keep what you earned. Progress is saved in your browser. The testing build starts you with 400 credits, 5 crystals, 1 rare crystal, 10 droid parts and 6 ingots. `?scene=run` skips the Cantina.
 
 ## Controls
 

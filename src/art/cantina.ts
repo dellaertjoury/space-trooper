@@ -250,7 +250,7 @@ export function drawHangingLamp(): HTMLCanvasElement {
 // Two-floor hub (tile scale). Floors are bands of wall, joined by a stairwell in the centre.
 // =====================================================================================================
 
-/** Wall art behind the two floors: warm panels, pipes, the stairwell door on both floors, bar shelves. */
+/** Wall art behind the two floors: warm panels, pipes, the stairwell signs, bar shelves. */
 export function drawHubBackdrop(w: number, h: number, floors: number[], wallL = 48, wallR = w - 48, slab = 72, stairX = w / 2): HTMLCanvasElement {
   const [cv, c] = mk(w, h);
   const rng = new Rng(7);
@@ -271,27 +271,12 @@ export function drawHubBackdrop(w: number, h: number, floors: number[], wallL = 
     for (let x = wallL + 40; x < wallR; x += 170) rect(c, x, y0 + 3, 10, 14, '#2e2f3c', 2, 2);
   });
 
-  // the stairwell: the same doorway on both floors, steps going up (ground) or down (upper floor)
+  // the stairwell doors themselves are sliding doors placed by the scene; only their signs are painted here
   for (const [fy, up] of [[G, true], [P, false]] as [number, boolean][]) {
-    const dw = 66, dh = 104, dx = stairX - dw / 2, dy = fy - dh;
-    rect(c, dx - 8, dy - 8, dw + 16, dh + 8, '#5b5f73', 3, 8);
-    c.fillStyle = '#0b0709'; c.fillRect(dx, dy, dw, dh);
-    const steps = 7;
-    for (let i = 0; i < steps; i++) {
-      const sx = dx + 4 + i * ((dw - 8) / steps);
-      const sh = up ? 10 + i * 12 : dh - 12 - i * 12;
-      c.fillStyle = i % 2 ? '#3a2422' : '#45292a';
-      c.fillRect(sx, fy - sh, (dw - 8) / steps + 1, sh);
-      band(c, sx, fy - sh, (dw - 8) / steps + 1, 2, '#8a5236');
-    }
-    const lg = c.createLinearGradient(0, dy, 0, fy);
-    lg.addColorStop(0, up ? 'rgba(255,190,120,0.35)' : 'rgba(0,0,0,0)'); lg.addColorStop(1, up ? 'rgba(0,0,0,0)' : 'rgba(255,190,120,0.25)');
-    c.fillStyle = lg; c.fillRect(dx, dy, dw, dh);
-    for (let y = dy; y < fy; y += 20) { c.fillStyle = (y / 20) % 2 ? '#ffb347' : INK; c.fillRect(dx - 8, y, 5, 10); c.fillRect(dx + dw + 3, y, 5, 10); }
     c.font = 'bold 12px Oswald, Impact, sans-serif'; c.textAlign = 'center';
     c.lineWidth = 4; c.strokeStyle = INK;
     const label = up ? 'UPSTAIRS  \u25B2' : 'DOWNSTAIRS  \u25BC';
-    c.strokeText(label, stairX, dy - 14); c.fillStyle = '#ffd58a'; c.fillText(label, stairX, dy - 14);
+    c.strokeText(label, stairX, fy - 124); c.fillStyle = '#ffd58a'; c.fillText(label, stairX, fy - 124);
   }
 
   // the bar's back wall: bottle shelves + neon sign (ground floor, left)

@@ -12,7 +12,8 @@ export interface Bolt { id: number; x: number; y: number; vx: number; vy: number
 
 export interface Crate { x: number; y: number; w: number; h: number; color: string; open: boolean; flash: number }
 
-export interface SimOptions { enemies?: boolean }
+/** enemies: spawn the Dune Raiders (default yes). dummies: training targets, only for balance tests (default no). */
+export interface SimOptions { enemies?: boolean; dummies?: boolean }
 
 export interface Dummy {
   x: number; y: number; w: number; h: number;
@@ -46,7 +47,7 @@ export class Sim {
     this.map = this.level.map;
     this.player = new Player(this.level.spawn.x, this.level.spawn.y, loadout);
     if (loadout.droid === 'turret') this.drone = { x: this.level.spawn.x - 20, y: this.level.spawn.y - 20, cd: 60 };
-    for (const d of this.level.dummies) {
+    if (opts.dummies) for (const d of this.level.dummies) {
       this.dummies.push({ x: d.x - 14, y: d.y - 46, w: 28, h: 46, hp: 60, maxHp: 60, flash: 0, respawn: 0, lastHitId: -1, knock: 0, homeX: d.x - 14 });
     }
     if (opts.enemies !== false) this.level.enemies.forEach((e, i) => this.enemies.push(makeEnemy(i, e.kind, e.x + T / 2, e.y, e.range)));

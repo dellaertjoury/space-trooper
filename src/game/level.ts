@@ -4,7 +4,7 @@ export interface LevelDef {
   name: string;
   map: TileMap;
   spawn: { x: number; y: number }; // pixel position of the player's hitbox top-left
-  dummies: { x: number; y: number }[]; // feet position (pixels)
+  dummies: { x: number; y: number }[]; // feet position (pixels); only spawned by balance tests, not in the game
   enemies: { kind: 'raider' | 'gunner'; x: number; y: number; range: number }[]; // feet position, patrol half-width
   crates: { x: number; y: number; color: 'grey' | 'brown' | 'green' | 'blue' | 'maroon' }[]; // feet position
   signs: { x: number; y: number; text: string }[];
@@ -15,7 +15,7 @@ export interface LevelDef {
 /**
  * Phase 1 test room: every move has a place to be practised.
  * Floor top is tile row 26. Read left to right:
- * start -> steps -> one-way platforms -> pit -> roll gap under a hanging wall -> wall-jump shaft -> ledge block -> training dummies.
+ * start -> steps -> one-way platforms -> pit -> roll gap under a hanging wall -> wall-jump shaft -> ledge block -> exit.
  * Dune Raiders patrol along the way; supply crates break open for credits.
  */
 export function testRoom(): LevelDef {
@@ -85,7 +85,6 @@ export function testRoom(): LevelDef {
       { ...tile(62, 26), text: 'WALL JUMP' },
       { ...tile(76, 26), text: 'GRAB LEDGES' },
       { ...tile(82, 26), text: 'ATTACK SPACE   SWAP A' },
-      { ...tile(102, 22), text: 'SPACE: BACK TO CANTINA' },
     ],
   };
 }
